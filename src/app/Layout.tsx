@@ -25,7 +25,7 @@ const GROUPS: Group[] = [
     { to: '/shop', label: 'Cửa hàng', icon: ShoppingBag },
   ] },
   { title: 'Vận hành', items: [
-    { to: '/incidents', label: 'Sự cố', icon: AlertTriangle },
+    { to: '/support', label: 'Hỗ trợ', icon: AlertTriangle },
     { to: '/reports', label: 'Báo cáo', icon: BarChart3 },
   ] },
 ]

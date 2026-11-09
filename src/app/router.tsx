@@ -13,11 +13,15 @@ import { ProjectsPage } from '../features/tasks/ProjectsPage'
 import { Layout } from './Layout'
 import { Home, Placeholder } from './pages'
 import { RequireAuth } from './RequireAuth'
+// Đã sửa đúng đường dẫn thư mục thành 'support' (chữ thường)
+import { SupportPage } from '../features/support/SupportPage'
+import { ReportsPage } from '../features/support/ReportsPage'
 
+// ĐÃ XÓA 'support' và 'reports' khỏi mảng PAGES để không bị trùng lặp và ghi đè
 const PAGES: [string, string][] = [
   ['tasks', 'Công việc của tôi'], ['calendar', 'Lịch'], ['quiz', 'Quiz'], ['quests', 'Nhiệm vụ'],
-  ['shop', 'Cửa hàng'], ['incidents', 'Sự cố'], ['proposals', 'Đề xuất'],
-  ['reports', 'Báo cáo'], ['wall', 'Tường cải tiến'], ['members', 'Thành viên'],
+  ['shop', 'Cửa hàng'], ['proposals', 'Đề xuất'],
+  ['wall', 'Tường cải tiến'], ['members', 'Thành viên'],
   ['notifications', 'Thông báo'],
 ]
 
@@ -42,6 +46,10 @@ export const router = createBrowserRouter([
           { path: 'chat/:channelId', element: <ChatPage /> },
           { path: 'projects', element: <ProjectsPage /> },
           { path: 'projects/:id', element: <BoardPage /> },
+          // Khai báo tường minh đường dẫn Hỗ trợ và Báo cáo chính thức
+          { path: 'support', element: <SupportPage /> },
+          { path: 'reports', element: <ReportsPage /> },
+          // Các trang khác chạy qua Placeholder
           ...PAGES.map(([path, title]) => ({ path, element: <Placeholder title={title} /> })),
           {
             element: <RequireAuth role="admin" />,
