@@ -14,8 +14,8 @@ import { Layout } from './Layout'
 import { Home, Placeholder } from './pages'
 import { RequireAuth } from './RequireAuth'
 // Đã sửa đúng đường dẫn thư mục thành 'support' (chữ thường)
-import { SupportPage } from '../features/Support/SupportPage'
-import { ReportsPage } from '../features/Support/ReportsPage'
+import  SupportPage  from '../features/Support/SupportPage'
+import  ReportsPage  from '../features/Support/ReportsPage'
 
 // ĐÃ XÓA 'support' và 'reports' khỏi mảng PAGES để không bị trùng lặp và ghi đè
 const PAGES: [string, string][] = [
