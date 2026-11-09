@@ -18,11 +18,20 @@ function useDepartments() {
   })
 }
 
+// Mã ngẫu nhiên 8 ký tự, bỏ các ký tự dễ nhầm (0/O, 1/I). 32^8 tổ hợp nên không đoán được.
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+function genCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return 'AUR-' + Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join('')
+}
+
 export function AdminCodes() {
   const qc = useQueryClient()
   const { profile } = useAuth()
   const { data: depts = [] } = useDepartments()
   const [bulk, setBulk] = useState('')
+  const [random, setRandom] = useState(true)
+  const [issued, setIssued] = useState('')
   const [error, setError] = useState('')
   const { data: codes = [] } = useQuery({
     queryKey: ['admin-codes'],
@@ -33,10 +42,12 @@ export function AdminCodes() {
 
   const create = useMutation({
     mutationFn: async () => {
-      // Mỗi dòng: MÃ, Họ tên, Tên phòng ban (phòng ban có thể bỏ trống)
+      // Tự sinh mã: mỗi dòng "Họ tên, Phòng ban". Nhập tay: mỗi dòng "Mã, Họ tên, Phòng ban".
       const rows = bulk.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-        const [code, full_name, dept] = l.split(',').map((s) => s.trim())
-        if (!code || !full_name) throw new Error(`Dòng chưa đủ "Mã, Họ tên": ${l}`)
+        const parts = l.split(',').map((s) => s.trim())
+        const [code, full_name, dept] = (random ? [genCode(), parts[0], parts[1]] : parts) as string[]
+        if (!code || !full_name) throw new Error(`Dòng chưa đủ thông tin: ${l}`)
+        if (code.length < 8) throw new Error(`Mã phải từ 8 ký tự trở lên (mã ngắn dễ bị đoán): ${code}`)
         const d = depts.find((x) => x.name.toLowerCase() === (dept ?? '').toLowerCase())
         if (dept && !d) throw new Error(`Không có phòng ban "${dept}" ở dòng: ${l}`)
         return { code: code.toUpperCase(), full_name, department_id: d?.id ?? null, created_by: profile!.id }
@@ -44,8 +55,10 @@ export function AdminCodes() {
       if (!rows.length) throw new Error('Chưa nhập dòng nào')
       const { error } = await supabase.from('invite_codes').insert(rows)
       if (error) throw error
+      return rows
     },
-    onSuccess: () => {
+    onSuccess: (rows) => {
+      setIssued(rows.map((r) => `${r.full_name}: ${r.code}`).join('\n'))
       setBulk('')
       setError('')
       refresh()
@@ -64,14 +77,27 @@ export function AdminCodes() {
     <div className="max-w-3xl">
       <h1 className="text-xl font-semibold">Mã đăng ký</h1>
       <form onSubmit={(e: FormEvent) => { e.preventDefault(); create.mutate() }} className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-        <label className="block text-sm font-medium text-slate-700">
-          Thêm mã (mỗi dòng một người: Mã, Họ tên, Phòng ban)
-          <textarea rows={5} value={bulk} onChange={(e) => setBulk(e.target.value)} placeholder={'NV001, Nguyễn Văn A, Sản xuất\nNV002, Trần Thị B, QC'} className={`${field} mt-1 block w-full py-2 font-normal`} />
+        <label className="flex min-h-11 items-center gap-2 text-sm font-medium text-slate-700">
+          <input type="checkbox" checked={random} onChange={(e) => setRandom(e.target.checked)} />
+          Tự sinh mã ngẫu nhiên (khuyến nghị)
         </label>
-        <p className="mt-1 text-xs text-slate-600">Phòng ban: {depts.map((d) => d.name).join(', ')}</p>
+        <label className="mt-2 block text-sm font-medium text-slate-700">
+          {random ? 'Mỗi dòng một người: Họ tên, Phòng ban' : 'Mỗi dòng một người: Mã (từ 8 ký tự), Họ tên, Phòng ban'}
+          <textarea rows={5} value={bulk} onChange={(e) => setBulk(e.target.value)} placeholder={random ? 'Nguyễn Văn A, Sản xuất\nTrần Thị B, QC' : 'MA-RIENG-001, Nguyễn Văn A, Sản xuất'} className={`${field} mt-1 block w-full py-2 font-normal`} />
+        </label>
+        <p className="mt-1 text-xs text-slate-600">Phòng ban: {depts.map((d) => d.name).join(', ')} (có thể để trống)</p>
         {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
         <button disabled={create.isPending} className="mt-3 min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white disabled:opacity-60">Tạo mã</button>
       </form>
+      {issued && (
+        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+          <label className="block text-sm font-medium text-slate-700">
+            Mã vừa tạo (gửi riêng cho từng người, không đăng nơi công khai)
+            <textarea readOnly rows={Math.min(8, issued.split('\n').length)} value={issued} className={`${field} mt-1 block w-full py-2 font-mono font-normal`} />
+          </label>
+          <button type="button" onClick={() => navigator.clipboard.writeText(issued)} className="mt-2 min-h-11 rounded-md border border-slate-300 px-4 text-sm font-semibold">Sao chép danh sách</button>
+        </div>
+      )}
       <div className="mt-6 overflow-x-auto rounded-lg border border-slate-200 bg-white">
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs text-slate-600">
@@ -80,7 +106,7 @@ export function AdminCodes() {
           <tbody>
             {codes.map((c) => (
               <tr key={c.code} className="border-t border-slate-100">
-                <td className="p-3 font-semibold">{c.code}</td>
+                <td className="p-3 font-mono font-semibold">{c.code}</td>
                 <td className="p-3">{c.full_name}</td>
                 <td className="p-3">{c.departments?.name ?? '-'}</td>
                 <td className="p-3">{STATUS[c.status]}</td>

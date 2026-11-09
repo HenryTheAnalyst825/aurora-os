@@ -17,8 +17,11 @@ type AuthContextValue = {
   session: Session | null
   profile: Profile | null
   loading: boolean
+  refreshProfile: () => Promise<void>
   signOut: () => Promise<void>
 }
+
+const PROFILE_SELECT = 'id, employee_code, full_name, role, is_active, credits, xp, departments(name)'
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
@@ -47,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
     supabase
       .from('profiles')
-      .select('id, employee_code, full_name, role, is_active, credits, xp, departments(name)')
+      .select(PROFILE_SELECT)
       .eq('id', uid)
       .maybeSingle()
       .then(({ data }) => {
@@ -61,11 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [uid])
 
   // Đang tải = chưa biết phiên đăng nhập, hoặc đã đăng nhập nhưng chưa tải xong hồ sơ
+  // Tải lại hồ sơ (ví dụ sau khi nhận Credits từ game)
+  async function refreshProfile() {
+    if (!uid) return
+    const { data } = await supabase.from('profiles').select(PROFILE_SELECT).eq('id', uid).maybeSingle()
+    if (data) setProfile(data as unknown as Profile)
+  }
+
   const loading = !ready || (!!uid && profileFor !== uid)
 
   return (
     <AuthContext.Provider
-      value={{ session, profile, loading, signOut: async () => void (await supabase.auth.signOut()) }}
+      value={{ session, profile, loading, refreshProfile, signOut: async () => void (await supabase.auth.signOut()) }}
     >
       {children}
     </AuthContext.Provider>

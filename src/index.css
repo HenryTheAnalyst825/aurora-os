@@ -6,3 +6,21 @@
   --color-ink-2: #2c3644;
   --color-accent: #c2410c;
 }
+
+/* Hiệu ứng đóng dấu của các mini-game */
+@keyframes stamp-in {
+  0% { transform: translate(-50%, -50%) rotate(-14deg) scale(2.4); opacity: 0; }
+  60% { opacity: 1; }
+  100% { transform: translate(-50%, -50%) rotate(-14deg) scale(1); opacity: 0.92; }
+}
+.stamp {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  border: 5px solid currentColor; border-radius: 0.5rem; padding: 0.25rem 1rem;
+  font-size: 2rem; font-weight: 800; letter-spacing: 0.12em;
+  background: rgba(255, 255, 255, 0.6); pointer-events: none; opacity: 0.92;
+  animation: stamp-in 0.35s ease-out both;
+}
+.stamp-approved { color: #15803d; }
+.stamp-rejected { color: #b91c1c; }
+@media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }

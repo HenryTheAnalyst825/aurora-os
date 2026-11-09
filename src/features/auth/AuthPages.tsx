@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from './AuthProvider'
 
-function Shell({ title, footer, children }: { title: string; footer: ReactNode; children: ReactNode }) {
+export function Shell({ title, footer, children }: { title: string; footer: ReactNode; children: ReactNode }) {
   return (
     <div className="grid min-h-screen place-items-center bg-slate-100 p-4">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8">
@@ -16,7 +16,7 @@ function Shell({ title, footer, children }: { title: string; footer: ReactNode; 
   )
 }
 
-function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
+export function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTMLInputElement>) {
   return (
     <label className="mb-4 block text-sm font-medium text-slate-700">
       {label}
@@ -28,7 +28,7 @@ function Field({ label, ...props }: { label: string } & InputHTMLAttributes<HTML
   )
 }
 
-function Submit({ busy, children }: { busy: boolean; children: ReactNode }) {
+export function Submit({ busy, children }: { busy: boolean; children: ReactNode }) {
   return (
     <button
       type="submit"
@@ -59,7 +59,7 @@ export function LoginPage() {
   }
 
   return (
-    <Shell title="Đăng nhập" footer={<>Chưa có tài khoản? <Link to="/register" className="font-semibold text-accent underline">Đăng ký bằng mã</Link></>}>
+    <Shell title="Đăng nhập" footer={<>Chưa có tài khoản? <Link to="/register" className="font-semibold text-accent underline">Đăng ký bằng mã</Link><br /><Link to="/forgot" className="font-semibold text-accent underline">Quên mật khẩu?</Link></>}>
       <form onSubmit={onSubmit}>
         <Field label="Email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <Field label="Mật khẩu" type="password" required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />

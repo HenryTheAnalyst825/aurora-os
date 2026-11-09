@@ -5,6 +5,7 @@ import {
   LayoutDashboard, MessageSquare, ShoppingBag, Trophy, Users, type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../features/auth/AuthProvider'
+import { useNewDocsCount } from '../features/documents/hooks'
 import { useRealtimeSync } from '../features/tasks/realtime'
 import { Topbar } from './Topbar'
 
@@ -35,6 +36,7 @@ const ADMIN_GROUP: Group = { title: 'Quản trị', items: [
 ] }
 
 function Sidebar({ groups, onNavigate }: { groups: Group[]; onNavigate?: () => void }) {
+  const { data: newDocs = 0 } = useNewDocsCount()
   return (
     <nav aria-label="Điều hướng chính" className="flex h-full w-56 flex-col overflow-y-auto bg-ink px-3 py-5 text-slate-300">
       <div className="px-2.5 pb-2 text-base font-bold text-white">Aurora OS</div>
@@ -53,6 +55,9 @@ function Sidebar({ groups, onNavigate }: { groups: Group[]; onNavigate?: () => v
             >
               <Icon size={16} aria-hidden="true" />
               {label}
+              {to === '/documents' && newDocs > 0 && (
+                <span aria-label={`${newDocs} tài liệu mới`} className="ml-auto rounded-full bg-accent px-2 py-0.5 text-xs font-semibold text-white">{newDocs}</span>
+              )}
             </NavLink>
           ))}
         </div>

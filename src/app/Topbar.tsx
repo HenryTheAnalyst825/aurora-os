@@ -4,12 +4,15 @@ import { Bell, LogOut, Menu } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../features/auth/AuthProvider'
 
-// Tiến độ toàn nhà máy = số task Done / tổng số task
+// Tiến độ nhà máy = % task hoàn thành + điểm thưởng từ game (hàm factory_progress).
+// Nếu hàm chưa được cài, quay về cách tính cũ (chỉ theo task).
 function useFactoryProgress() {
   return useQuery({
     queryKey: ['factory-progress'],
     refetchInterval: 60_000,
     queryFn: async () => {
+      const rpc = await supabase.rpc('factory_progress')
+      if (!rpc.error && typeof rpc.data === 'number') return Math.round(rpc.data)
       const [all, done] = await Promise.all([
         supabase.from('tasks').select('id', { count: 'exact', head: true }),
         supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'done'),
@@ -42,7 +45,8 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
           <div className="h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
         </div>
       </div>
-      <span className="ml-auto font-semibold">{(profile?.credits ?? 0).toLocaleString('vi-VN')} Credits</span>
+      <Link to="/profile" className="ml-auto hidden underline md:inline">{profile?.full_name}</Link>
+      <span className="ml-auto font-semibold md:ml-0">{(profile?.credits ?? 0).toLocaleString('vi-VN')} Credits</span>
       <Link to="/notifications" aria-label="Thông báo" className={iconBtn}>
         <Bell size={18} />
       </Link>

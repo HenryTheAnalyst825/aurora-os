@@ -20,6 +20,17 @@ export function useRealtimeSync() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
         qc.invalidateQueries({ queryKey: ['messages'] })
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_state' }, () => {
+        qc.invalidateQueries({ queryKey: ['factory-progress'] })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, () => {
+        qc.invalidateQueries({ queryKey: ['documents'] })
+        qc.invalidateQueries({ queryKey: ['docs-new'] })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'document_folders' }, () => {
+        qc.invalidateQueries({ queryKey: ['folders'] })
+        qc.invalidateQueries({ queryKey: ['documents'] })
+      })
       .subscribe()
     return () => {
       supabase.removeChannel(channel)
