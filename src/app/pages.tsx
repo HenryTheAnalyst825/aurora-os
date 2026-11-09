@@ -12,11 +12,11 @@ export function Home() {
       {/* Khu vực troll PM */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 text-center space-y-4 max-w-2xl mx-auto mt-8">
         <h3 className="font-bold text-lg text-slate-800">
-          🚨 Trạng thái PM khi hệ thống chạy ổn định không một lỗi bug:
+          🚨 NGƯỜI ẤY LÀ AI ?:
         </h3>
         <div className="overflow-hidden rounded-lg border border-slate-200 shadow-inner bg-slate-50 flex justify-center p-2">
           <img 
-            src="/pm-nghien.jpg" 
+            src="/troll-pm.jpg"
             alt="PM đang nạp năng lượng" 
             className="max-h-[400px] object-contain rounded-md"
           />
