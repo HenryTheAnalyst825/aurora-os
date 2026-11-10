@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Home /> },
           { path: 'profile', element: <ProfilePage /> },
           { path: 'games', element: <GamesHub /> },
-          { path: 'games/:dept', element: <GamePlay /> },
+          { path: 'games/:gameKey', element: <GamePlay /> },
           { path: 'leaderboard', element: <LeaderboardPage /> },
           { path: 'documents', element: <DocumentsPage /> },
           { path: 'docs', element: <DocumentsPage /> },
