@@ -39,6 +39,13 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Home /> },
           { path: 'profile', element: <ProfilePage /> },
+          // Đảm bảo mọi đường dẫn Chat và đường dẫn con đều hoạt động
+          { path: 'chat', element: <ChatPage /> },
+          { path: 'chat/*', element: <ChatPage /> },
+          { path: 'messages', element: <ChatPage /> },
+          { path: 'messages/*', element: <ChatPage /> },
+          { path: 'channels', element: <ChatPage /> },
+          { path: 'channels/*', element: <ChatPage /> },
           { path: 'games', element: <GamesHub /> },
           { path: 'games/:dept', element: <GamePlay /> },
           { path: 'leaderboard', element: <LeaderboardPage /> },
