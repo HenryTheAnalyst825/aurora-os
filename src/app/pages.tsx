@@ -65,7 +65,7 @@ export function Home() {
             className="p-4 rounded-lg border border-slate-200 hover:border-slate-900 transition bg-slate-50/50 space-y-1.5"
           >
             <span className="text-xs font-bold text-blue-600 uppercase">Bước 2</span>
-            <h3 className="font-semibold text-sm text-slate-900">Nhận việc trên Kanban</h3>
+            <h3 className="font-semibold text-sm text-slate-900">Mở Schedule & To-Do</h3>
             <p className="text-xs text-slate-600">
               Cập nhật tiến độ công việc hàng ngày để tích lũy điểm thưởng Credits.
             </p>
@@ -76,9 +76,9 @@ export function Home() {
             className="p-4 rounded-lg border border-slate-200 hover:border-slate-900 transition bg-slate-50/50 space-y-1.5"
           >
             <span className="text-xs font-bold text-blue-600 uppercase">Bước 3</span>
-            <h3 className="font-semibold text-sm text-slate-900">Giả lập Ca làm việc</h3>
+            <h3 className="font-semibold text-sm text-slate-900">Play games and quiz</h3>
             <p className="text-xs text-slate-600">
-              Rèn luyện kỹ năng xử lý tình huống thực tế và đua top Bảng xếp hạng.
+             Chơi các game tương ứng với vị trí của mình, hoàn thành có thể nhận credits.
             </p>
           </Link>
 
@@ -89,7 +89,7 @@ export function Home() {
             <span className="text-xs font-bold text-blue-600 uppercase">Bước 4</span>
             <h3 className="font-semibold text-sm text-slate-900">Hỏi AI Aurora Copilot</h3>
             <p className="text-xs text-slate-600">
-              Tra cứu nhanh hoặc gửi phiếu hỗ trợ (Ticket) khi gặp sự cố kỹ thuật.
+              Tra cứu nhanh hoặc gửi phiếu hỗ trợ (Ticket) khi vấn đề hoặc thắc mắc cần giải đáp.
             </p>
           </Link>
         </div>
