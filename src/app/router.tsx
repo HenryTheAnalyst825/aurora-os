@@ -39,32 +39,28 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Home /> },
           { path: 'profile', element: <ProfilePage /> },
-          // Đảm bảo mọi đường dẫn Chat và đường dẫn con đều hoạt động
-          { path: 'chat', element: <ChatPage /> },
-          { path: 'chat/*', element: <ChatPage /> },
-          { path: 'messages', element: <ChatPage /> },
-          { path: 'messages/*', element: <ChatPage /> },
-          { path: 'channels', element: <ChatPage /> },
-          { path: 'channels/*', element: <ChatPage /> },
           { path: 'games', element: <GamesHub /> },
           { path: 'games/:dept', element: <GamePlay /> },
           { path: 'leaderboard', element: <LeaderboardPage /> },
           { path: 'documents', element: <DocumentsPage /> },
           { path: 'docs', element: <DocumentsPage /> },
 
-          // Đảm bảo mọi đường dẫn Chat đều hoạt động
+          // Chat routes với đầy đủ param nhận channelId
           { path: 'chat', element: <ChatPage /> },
+          { path: 'chat/:channelId', element: <ChatPage /> },
           { path: 'messages', element: <ChatPage /> },
+          { path: 'messages/:channelId', element: <ChatPage /> },
           { path: 'channels', element: <ChatPage /> },
+          { path: 'channels/:channelId', element: <ChatPage /> },
 
-          // Đảm bảo mọi đường dẫn Lịch & Công việc (kể cả /projects cũ) đều mở trung tâm Schedule mới
+          // Lịch & Công việc / Schedule
           { path: 'board', element: <BoardPage /> },
           { path: 'projects', element: <BoardPage /> },
           { path: 'tasks', element: <BoardPage /> },
           { path: 'calendar', element: <BoardPage /> },
           { path: 'schedule', element: <BoardPage /> },
 
-          // Đảm bảo mọi đường dẫn Hỗ trợ đều hoạt động không bị 404
+          // Hỗ trợ
           { path: 'incidents', element: <SupportPage /> },
           { path: 'support', element: <SupportPage /> },
           { path: 'helpdesk', element: <SupportPage /> },
