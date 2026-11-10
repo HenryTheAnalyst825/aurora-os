@@ -19,7 +19,7 @@ type ViewMode = 'todo' | 'schedule' | 'board';
 type TodoFilter = 'all' | 'my_day' | 'important' | 'completed';
 
 export function BoardPage() {
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,8 +69,8 @@ export function BoardPage() {
       status: 'todo',
       priority: newPriority,
       due_date: newDueDate || new Date().toISOString().split('T')[0],
-      assignee_id: user?.id || null,
-      created_by: user?.id || null,
+      assignee_id: profile?.id || null,
+      created_by: profile?.id || null,
     };
 
     const { data, error } = await supabase.from('tasks').insert([payload]).select().single();
@@ -119,7 +119,7 @@ export function BoardPage() {
 
   // Bộ lọc tổng hợp
   const filteredTasks = tasks.filter(t => {
-    if (onlyMyTasks && user?.id && t.assignee_id && t.assignee_id !== user.id) return false;
+    if (onlyMyTasks && profile?.id && t.assignee_id && t.assignee_id !== profile.id) return false;
     if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
     if (searchQuery.trim() && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
 
