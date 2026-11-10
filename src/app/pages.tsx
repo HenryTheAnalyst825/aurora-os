@@ -15,7 +15,7 @@ export function Home() {
           </h1>
           <p className="mt-1 text-sm text-slate-600">
             Mã nhân viên: <span className="font-semibold">{profile?.employee_code || 'ADMIN-0001'}</span> •{' '}
-            <span>{profile?.department || (isAdmin ? 'Ban Quản Trị Hệ Thống' : 'Thành viên nhà máy')}</span>
+            <span><span>{profile?.departments?.name || (isAdmin ? 'Ban Quản Trị Hệ Thống' : 'Thành viên nhà máy')}</span></span>
           </p>
         </div>
         <div className="flex gap-2">

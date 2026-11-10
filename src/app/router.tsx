@@ -34,29 +34,35 @@ export const router = createBrowserRouter([
   { path: '/forgot', element: <ForgotPage /> },
   { path: '/reset', element: <ResetPage /> },
   {
-    path: '/',
-    element: (
-      <RequireAuth>
-        <Layout />
-      </RequireAuth>
-    ),
+    element: <RequireAuth />,
     children: [
-      { index: true, element: <Home /> },
-      { path: 'profile', element: <ProfilePage /> },
-      { path: 'games', element: <GamesHub /> },
-      { path: 'games/:dept', element: <GamePlay /> },
-      { path: 'leaderboard', element: <LeaderboardPage /> },
-      { path: 'documents', element: <DocumentsPage /> },
-      { path: 'chat', element: <ChatPage /> },
-      { path: 'board', element: <BoardPage /> },
-      { path: 'projects', element: <ProjectsPage /> },
-      { path: 'incidents', element: <SupportPage /> },
-      { path: 'reports', element: <ReportsPage /> },
-      { path: 'notifications', element: <NotificationsPage /> },
-      { path: 'admin/users', element: <AdminUsers /> },
-      { path: 'admin/codes', element: <AdminCodes /> },
-      ...PAGES.map(([p, t]) => ({ path: p, element: <Placeholder title={t} /> })),
-      { path: '*', element: <NotFoundPage /> },
+      {
+        path: '/',
+        element: <Layout />,
+        children: [
+          { index: true, element: <Home /> },
+          { path: 'profile', element: <ProfilePage /> },
+          { path: 'games', element: <GamesHub /> },
+          { path: 'games/:dept', element: <GamePlay /> },
+          { path: 'leaderboard', element: <LeaderboardPage /> },
+          { path: 'documents', element: <DocumentsPage /> },
+          { path: 'chat', element: <ChatPage /> },
+          { path: 'board', element: <BoardPage /> },
+          { path: 'projects', element: <ProjectsPage /> },
+          { path: 'incidents', element: <SupportPage /> },
+          { path: 'reports', element: <ReportsPage /> },
+          { path: 'notifications', element: <NotificationsPage /> },
+          ...PAGES.map(([p, t]) => ({ path: p, element: <Placeholder title={t} /> })),
+          {
+            element: <RequireAuth role="admin" />,
+            children: [
+              { path: 'admin/users', element: <AdminUsers /> },
+              { path: 'admin/codes', element: <AdminCodes /> },
+            ],
+          },
+          { path: '*', element: <NotFoundPage /> },
+        ],
+      },
     ],
   },
 ])

@@ -32,7 +32,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       <button aria-label="Mở menu" onClick={onMenu} className={`${iconBtn} md:hidden`}>
         <Menu size={20} />
       </button>
-      <span className="font-semibold">{profile?.department || (profile?.role === 'admin' ? 'Ban Quản Trị Hệ Thống' : 'Chưa phân phòng ban')}</span>
+      <span className="font-semibold">{profile?.departments?.name || (profile?.role === 'admin' ? 'Ban Quản Trị Hệ Thống' : 'Chưa có phòng ban')}</span>
       <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
         {profile?.role === 'admin' ? 'Admin' : 'User'}
       </span>
