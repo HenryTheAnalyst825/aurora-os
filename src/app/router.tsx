@@ -9,7 +9,6 @@ import { LeaderboardPage } from '../features/games/LeaderboardPage'
 import { DocumentsPage } from '../features/documents/DocumentsPage'
 import { ChatPage } from '../features/chat/ChatPage'
 import { BoardPage } from '../features/tasks/BoardPage'
-import { ProjectsPage } from '../features/tasks/ProjectsPage'
 import { Layout } from './Layout'
 import { Home, Placeholder, NotFoundPage } from './pages'
 import { RequireAuth } from './RequireAuth'
@@ -18,8 +17,6 @@ import ReportsPage from '../features/Support/ReportsPage'
 import NotificationsPage from '../features/notifications/NotificationsPage'
 
 const PAGES: [string, string][] = [
-  ['tasks', 'Công việc của tôi'],
-  ['calendar', 'Lịch'],
   ['quiz', 'Quiz'],
   ['quests', 'Nhiệm vụ'],
   ['shop', 'Cửa hàng'],
@@ -46,12 +43,29 @@ export const router = createBrowserRouter([
           { path: 'games/:dept', element: <GamePlay /> },
           { path: 'leaderboard', element: <LeaderboardPage /> },
           { path: 'documents', element: <DocumentsPage /> },
+          { path: 'docs', element: <DocumentsPage /> },
+
+          // Đảm bảo mọi đường dẫn Chat đều hoạt động
           { path: 'chat', element: <ChatPage /> },
+          { path: 'messages', element: <ChatPage /> },
+          { path: 'channels', element: <ChatPage /> },
+
+          // Đảm bảo mọi đường dẫn Lịch & Công việc (kể cả /projects cũ) đều mở trung tâm Schedule mới
           { path: 'board', element: <BoardPage /> },
-          { path: 'projects', element: <ProjectsPage /> },
+          { path: 'projects', element: <BoardPage /> },
+          { path: 'tasks', element: <BoardPage /> },
+          { path: 'calendar', element: <BoardPage /> },
+          { path: 'schedule', element: <BoardPage /> },
+
+          // Đảm bảo mọi đường dẫn Hỗ trợ đều hoạt động không bị 404
           { path: 'incidents', element: <SupportPage /> },
+          { path: 'support', element: <SupportPage /> },
+          { path: 'helpdesk', element: <SupportPage /> },
+          { path: 'tickets', element: <SupportPage /> },
+
           { path: 'reports', element: <ReportsPage /> },
           { path: 'notifications', element: <NotificationsPage /> },
+
           ...PAGES.map(([p, t]) => ({ path: p, element: <Placeholder title={t} /> })),
           {
             element: <RequireAuth role="admin" />,
