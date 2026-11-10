@@ -14,7 +14,7 @@ type Group = { title: string; items: { to: string; label: string; icon: LucideIc
 const GROUPS: Group[] = [
   { title: 'Làm việc', items: [
     { to: '/', label: 'Tổng quan', icon: LayoutDashboard },
-    { to: '/projects', label: 'Schedule', icon: Columns3 },
+    { to: '/board', label: 'Lịch & Công việc', icon: Columns3 },
     { to: '/chat', label: 'Chat', icon: MessageSquare },
     { to: '/documents', label: 'Tài liệu', icon: FileText },
   ] },
