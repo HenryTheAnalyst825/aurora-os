@@ -1,7 +1,20 @@
 import { useState, type FormEvent } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowRightLeft, CheckCircle2, Crown, LifeBuoy, Shield, Sparkles } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  CheckCircle2,
+  Crown,
+  Flame,
+  Gem,
+  LifeBuoy,
+  Shield,
+  Sparkles,
+  Swords,
+  Trophy,
+} from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
+import { LOL_RANKS } from '../../app/Topbar'
 import {
   fetchActiveMembers,
   fetchMyActiveTasks,
@@ -19,120 +32,101 @@ export type RankTier =
   | 'master'
   | 'challenger'
 
-export interface RankMeta {
+export interface RankCardMeta {
   key: RankTier
   name: string
   cost: number
-  badgeClass: string
-  frameClass: string
-  glowText: string
+  title: string
+  cardBorder: string
 }
 
-const RANK_ORDER: RankMeta[] = [
-  {
-    key: 'bronze',
-    name: 'Đồng',
-    cost: 100,
-    badgeClass: 'border-amber-700/40 bg-amber-100 text-amber-950',
-    frameClass: 'ring-2 ring-amber-700/60 bg-amber-50/40',
-    glowText: 'Chiến Binh Đồng',
-  },
-  {
-    key: 'silver',
-    name: 'Bạc',
-    cost: 150,
-    badgeClass: 'border-slate-400 bg-slate-200 text-slate-900',
-    frameClass: 'ring-2 ring-slate-400 bg-slate-50',
-    glowText: 'Hiệp Sĩ Bạc',
-  },
-  {
-    key: 'gold',
-    name: 'Vàng',
-    cost: 200,
-    badgeClass: 'border-yellow-500 bg-yellow-100 text-yellow-950',
-    frameClass: 'ring-2 ring-yellow-500 bg-yellow-50/50 shadow-sm',
-    glowText: 'Vinh Quang Vàng',
-  },
-  {
-    key: 'emerald',
-    name: 'Lục Bảo',
-    cost: 300,
-    badgeClass: 'border-emerald-600 bg-emerald-100 text-emerald-950',
-    frameClass: 'ring-2 ring-emerald-500 bg-emerald-50/50 shadow-sm',
-    glowText: 'Tinh Anh Lục Bảo',
-  },
-  {
-    key: 'diamond',
-    name: 'Kim Cương',
-    cost: 400,
-    badgeClass: 'border-cyan-500 bg-cyan-100 text-cyan-950',
-    frameClass: 'ring-2 ring-cyan-500 bg-cyan-50/60 shadow-sm',
-    glowText: 'Siêu Phẩm Kim Cương',
-  },
-  {
-    key: 'master',
-    name: 'Cao Thủ',
-    cost: 550,
-    badgeClass: 'border-purple-600 bg-purple-100 text-purple-950',
-    frameClass: 'ring-2 ring-purple-600 bg-purple-50/60 shadow-md',
-    glowText: 'Đẳng Cấp Cao Thủ',
-  },
-  {
-    key: 'challenger',
-    name: 'Thách Đấu',
-    cost: 700,
-    badgeClass: 'border-amber-500 bg-gradient-to-r from-amber-200 via-yellow-100 to-rose-200 text-slate-950',
-    frameClass: 'ring-2 ring-amber-500 bg-gradient-to-r from-amber-50 via-white to-rose-50 shadow-md',
-    glowText: 'Huyền Thoại Thách Đấu',
-  },
+const RANK_LIST: RankCardMeta[] = [
+  { key: 'bronze', name: 'Đồng', cost: 100, title: 'Chiến Binh Đồng Đoàn', cardBorder: 'border-amber-700 bg-amber-950/90 text-amber-100' },
+  { key: 'silver', name: 'Bạc', cost: 150, title: 'Hiệp Sĩ Bạc Đoàn', cardBorder: 'border-slate-300 bg-slate-800 text-slate-100' },
+  { key: 'gold', name: 'Vàng', cost: 200, title: 'Chiến Thần Vàng Đoàn', cardBorder: 'border-yellow-400 bg-amber-900 text-yellow-100' },
+  { key: 'emerald', name: 'Lục Bảo', cost: 300, title: 'Tinh Anh Lục Bảo', cardBorder: 'border-emerald-400 bg-emerald-950 text-emerald-100' },
+  { key: 'diamond', name: 'Kim Cương', cost: 400, title: 'Siêu Phẩm Kim Cương', cardBorder: 'border-cyan-300 bg-indigo-950 text-cyan-100' },
+  { key: 'master', name: 'Cao Thủ', cost: 550, title: 'Đẳng Cấp Cao Thủ', cardBorder: 'border-fuchsia-400 bg-purple-950 text-pink-100' },
+  { key: 'challenger', name: 'Thách Đấu', cost: 700, title: 'Huyền Thoại Thách Đấu', cardBorder: 'border-amber-300 bg-gradient-to-r from-slate-950 via-red-950 to-amber-950 text-amber-100' },
 ]
 
-const RANK_BY_KEY: Record<RankTier, RankMeta> = Object.fromEntries(
-  RANK_ORDER.map((r) => [r.key, r]),
-) as Record<RankTier, RankMeta>
-
-function getNextRank(current?: string | null): RankMeta | null {
-  if (!current) return RANK_ORDER[0]
-  const idx = RANK_ORDER.findIndex((r) => r.key === current)
-  if (idx === -1) return RANK_ORDER[0]
-  return RANK_ORDER[idx + 1] ?? null
+function RankIcon({ tier, size = 14 }: { tier: RankTier; size?: number }) {
+  if (tier === 'challenger') return <Trophy size={size} aria-hidden="true" />
+  if (tier === 'master') return <Flame size={size} aria-hidden="true" />
+  if (tier === 'diamond' || tier === 'emerald') return <Gem size={size} aria-hidden="true" />
+  if (tier === 'gold') return <Sparkles size={size} aria-hidden="true" />
+  return <Swords size={size} aria-hidden="true" />
 }
 
-function HonorPreview({
+export function LolHonorBanner({
   fullName,
   rankTier,
   isManager,
-  compact = false,
 }: {
   fullName?: string | null
   rankTier?: string | null
   isManager?: boolean | null
-  compact?: boolean
 }) {
-  const rank = rankTier ? RANK_BY_KEY[rankTier as RankTier] : undefined
-  const base = fullName?.trim() || 'Nhân viên'
-  const displayName = isManager ? `Manager - ${base}` : base
+  const rank = rankTier ? LOL_RANKS[rankTier] : undefined
+  const baseName = fullName?.trim() || 'Nhân viên'
+  const displayName = isManager ? `Manager - ${baseName}` : baseName
+  const initials =
+    baseName
+      .split(' ')
+      .filter(Boolean)
+      .slice(-2)
+      .map((w) => w[0]?.toUpperCase())
+      .join('') || 'AU'
 
   return (
-    <div className={`inline-flex flex-col rounded-lg px-2.5 py-1 transition-all ${rank ? rank.frameClass : ''}`}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {isManager && (
-          <span className="inline-flex items-center gap-1 rounded bg-orange-600 px-1.5 py-0.5 text-[11px] font-bold text-white">
-            <Crown size={11} aria-hidden="true" />
-            MANAGER
+    <div
+      className={`inline-flex items-center gap-3.5 rounded-xl border-2 px-4 py-2.5 transition-all ${
+        rank ? `${rank.plateBg} ${rank.glowClass}` : 'border-slate-300 bg-slate-800 text-white'
+      }`}
+    >
+      {/* Khung Avatar kiểu LOL */}
+      <div className="relative flex shrink-0 items-center justify-center">
+        <div
+          className={`grid size-12 place-items-center rounded-full text-base font-black ${
+            rank ? `${rank.avatarBg} ${rank.avatarRing}` : 'bg-slate-700 text-white ring-2 ring-slate-400'
+          }`}
+        >
+          {initials}
+        </div>
+        {rank && rankTier && (
+          <span
+            className={`-bottom-1.5 absolute inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[9px] font-black shadow ${rank.gemBg}`}
+          >
+            <RankIcon tier={rankTier as RankTier} size={10} />
           </span>
         )}
-        <span className="font-semibold text-slate-900">{displayName}</span>
       </div>
-      {rank && (
-        <div className="mt-0.5 flex items-center gap-1">
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${rank.badgeClass}`}>
-            <Shield size={11} aria-hidden="true" />
-            Super Star · {rank.name}
-          </span>
-          {!compact && <span className="text-[11px] font-medium text-slate-600">({rank.glowText})</span>}
+
+      {/* Tên + Ruy-băng Khung Rank ngay bên dưới tên */}
+      <div className="flex flex-col text-left">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {isManager && (
+            <span className="inline-flex items-center gap-1 rounded bg-gradient-to-r from-amber-500 to-orange-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white shadow">
+              <Crown size={11} aria-hidden="true" />
+              MANAGER
+            </span>
+          )}
+          <span className="text-base font-extrabold text-white">{displayName}</span>
         </div>
-      )}
+
+        {rank ? (
+          <div className="mt-1 flex items-center gap-1.5">
+            <span
+              className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider shadow ${rank.ribbonBg}`}
+            >
+              <Shield size={11} aria-hidden="true" />
+              KHUNG {rank.name} · {rank.title}
+            </span>
+          </div>
+        ) : (
+          <span className="mt-0.5 text-xs text-slate-300">Chưa trang bị khung Rank</span>
+        )}
+      </div>
     </div>
   )
 }
@@ -143,11 +137,29 @@ export function ShopPage() {
   const { profile, refreshProfile } = useAuth()
   const qc = useQueryClient()
   const isAdmin = profile?.role === 'admin'
-  const effectiveCredits = isAdmin ? Number.MAX_SAFE_INTEGER : (profile?.credits ?? 0)
-  const rankTier = (profile as { rank_tier?: string | null } | null)?.rank_tier ?? null
-  const isManagerTag = Boolean((profile as { is_manager_tag?: boolean | null } | null)?.is_manager_tag)
-  const nextRank = getNextRank(rankTier)
-  const currentRankMeta = rankTier ? RANK_BY_KEY[rankTier as RankTier] : null
+
+  // Truy vấn trực tiếp rank_tier, is_manager_tag, credits từ bảng profiles
+  const { data: myHonors } = useQuery({
+    queryKey: ['my-honors', profile?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('rank_tier, is_manager_tag, credits')
+        .eq('id', profile!.id)
+        .single()
+      return data as { rank_tier: string | null; is_manager_tag: boolean | null; credits: number | null } | null
+    },
+    enabled: !!profile?.id,
+  })
+
+  const currentRankTier = (myHonors?.rank_tier ?? (profile as { rank_tier?: string | null } | null)?.rank_tier ?? null) as RankTier | null
+  const isManagerTag = Boolean(myHonors?.is_manager_tag ?? (profile as { is_manager_tag?: boolean | null } | null)?.is_manager_tag)
+  const currentCredits = myHonors?.credits ?? profile?.credits ?? 0
+  const effectiveCredits = isAdmin ? Number.MAX_SAFE_INTEGER : currentCredits
+
+  // Cho phép người dùng bấm chọn bất kỳ Rank nào để xem trước và mua/trang bị ngay
+  const [selectedTier, setSelectedTier] = useState<RankTier>('challenger')
+  const selectedRankMeta = RANK_LIST.find((r) => r.key === selectedTier) ?? RANK_LIST[6]
 
   const [supportNote, setSupportNote] = useState('')
   const [selectedTaskId, setSelectedTaskId] = useState('')
@@ -175,9 +187,11 @@ export function ShopPage() {
 
   const invalidateAll = async () => {
     await refreshProfile()
+    qc.invalidateQueries({ queryKey: ['my-honors'] })
     qc.invalidateQueries({ queryKey: ['perk-redemptions'] })
     qc.invalidateQueries({ queryKey: ['shop-my-tasks'] })
     qc.invalidateQueries({ queryKey: ['tasks'] })
+    qc.invalidateQueries({ queryKey: ['admin-users'] })
   }
 
   const redeem = useMutation({
@@ -185,7 +199,11 @@ export function ShopPage() {
       redeemPerk(key, payload ?? {}),
     onSuccess: async (res) => {
       setError('')
-      setFlash(`Đổi thành công: ${res.perk_title} (−${res.cost} Credits). Số dư còn: ${res.remaining_credits} Credits.`)
+      setFlash(
+        `Thành công: ${res.perk_title}${
+          isAdmin ? ' (Admin: Miễn phí 0 Credits)' : ` (−${res.cost} Credits, còn ${res.remaining_credits} Credits)`
+        }`,
+      )
       setSupportNote('')
       setSelectedTaskId('')
       setTargetUserId('')
@@ -206,23 +224,24 @@ export function ShopPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
+      {/* Header & Khung LOL hiện tại của người dùng */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Trạm Đặc Quyền & Vinh Danh (Workshop Perks)</h1>
+          <h1 className="text-xl font-semibold text-slate-900">Trạm Đặc Quyền & Khung Danh Hiệu (Workshop Perks)</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Sử dụng Credits tích lũy từ Ca Giả Lập và Công Việc để kích hoạt quyền trợ giúp, chuyển giao lịch việc hoặc thăng bậc danh hiệu.
+            Chọn bất kỳ bậc Khung Super Star (Đồng → Thách Đấu) kiểu LOL để trang bị ngay dưới tên của bạn, hoặc sử dụng các đặc quyền điều phối công việc.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
-          <div className="text-right">
-            <div className="text-xs font-medium text-slate-500">Danh hiệu & Hiển thị hiện tại</div>
-            <div className="mt-1">
-              <HonorPreview fullName={profile.full_name} rankTier={rankTier} isManager={isManagerTag} />
-            </div>
+          <div>
+            <div className="mb-1 text-xs font-semibold text-slate-500">Khung danh hiệu hiện tại của bạn:</div>
+            <LolHonorBanner fullName={profile.full_name} rankTier={currentRankTier} isManager={isManagerTag} />
           </div>
-          <div className="rounded-lg bg-slate-900 px-4 py-2.5 text-white">
+          <div className="rounded-xl bg-slate-900 px-4 py-3 text-white">
             <div className="text-xs text-slate-300">Số dư khả dụng</div>
-            <div className="text-xl font-bold text-amber-400">{isAdmin ? '∞ Vô hạn' : `${profile.credits} Credits`}</div>
+            <div className="text-xl font-bold text-amber-400">
+              {isAdmin ? '∞ Vô hạn' : `${currentCredits} Credits`}
+            </div>
           </div>
         </div>
       </div>
@@ -238,7 +257,93 @@ export function ShopPage() {
         </p>
       )}
 
-      <div className="grid gap-5 md:grid-cols-2">
+      {/* MỤC NỔI BẬT: CHỌN & TRANG BỊ BẤT KỲ KHUNG RANK LOL NÀO (ĐỒNG -> THÁCH ĐẤU) */}
+      <div className="rounded-xl border-2 border-amber-400/80 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 p-6 text-white shadow-lg">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/20 px-3 py-1 text-xs font-bold text-amber-300">
+              <Trophy size={14} aria-hidden="true" />
+              HỆ THỐNG KHUNG & HUY HIỆU 7 BẬC
+            </span>
+            <h2 className="mt-2 text-lg font-bold text-white">
+              Chứng Nhận "Super Star" — Chọn Bất Kỳ Khung Rank Nào Bạn Muốn!
+            </h2>
+            <p className="mt-1 text-sm text-slate-300">
+              Bấm vào một bậc bên dưới để xem trước Khung Avatar + Ruy-băng Danh Hiệu, sau đó bấm <b>Trang bị ngay</b>.
+            </p>
+          </div>
+
+          {/* Khung Preview trực tiếp của bậc đang chọn */}
+          <div className="rounded-xl border border-slate-700 bg-slate-800/90 p-3">
+            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-amber-300">
+              Xem trước khung đang chọn ({selectedRankMeta.name}):
+            </div>
+            <LolHonorBanner fullName={profile.full_name} rankTier={selectedTier} isManager={isManagerTag} />
+          </div>
+        </div>
+
+        {/* 7 Thẻ chọn trực tiếp các bậc Rank */}
+        <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7">
+          {RANK_LIST.map((r) => {
+            const isSelected = selectedTier === r.key
+            const isEquipped = currentRankTier === r.key
+            return (
+              <button
+                key={r.key}
+                type="button"
+                onClick={() => setSelectedTier(r.key)}
+                className={`flex flex-col items-center justify-between rounded-xl border-2 p-3 text-center transition-all ${
+                  r.cardBorder
+                } ${
+                  isSelected
+                    ? 'scale-105 ring-4 ring-amber-400 shadow-[0_0_20px_rgba(251,191,36,0.6)]'
+                    : 'opacity-80 hover:opacity-100'
+                }`}
+              >
+                <div className="grid size-10 place-items-center rounded-full bg-white/10">
+                  <RankIcon tier={r.key} size={20} />
+                </div>
+                <div className="mt-2 font-black uppercase tracking-wide">{r.name}</div>
+                <div className="mt-0.5 text-[11px] opacity-90">
+                  {isAdmin ? '0 Credits (Admin)' : `${r.cost} Credits`}
+                </div>
+                {isEquipped && (
+                  <span className="mt-1.5 rounded bg-green-400 px-1.5 py-0.5 text-[10px] font-black text-slate-950">
+                    ĐANG DÙNG
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
+          <div className="text-sm text-slate-300">
+            Bậc đang chọn: <b className="text-amber-300">Khung {selectedRankMeta.name} ({selectedRankMeta.title})</b> · Chi phí:{' '}
+            <b className="text-white">{isAdmin ? 'Miễn phí (Admin ∞)' : `${selectedRankMeta.cost} Credits`}</b>
+          </div>
+          <button
+            type="button"
+            disabled={redeem.isPending || (!isAdmin && effectiveCredits < selectedRankMeta.cost)}
+            onClick={() =>
+              redeem.mutate({
+                key: 'super_star_up',
+                payload: { target_tier: selectedTier },
+              })
+            }
+            className="min-h-11 rounded-lg bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 px-6 text-sm font-black text-white shadow-lg hover:brightness-110 disabled:opacity-50"
+          >
+            {redeem.isPending
+              ? 'Đang trang bị…'
+              : currentRankTier === selectedTier
+              ? `Cập nhật lại Khung ${selectedRankMeta.name}`
+              : `Trang bị ngay Khung ${selectedRankMeta.name} (${isAdmin ? 'Miễn phí' : `${selectedRankMeta.cost} Credits`})`}
+          </button>
+        </div>
+      </div>
+
+      {/* 3 ĐẶC QUYỀN CÒN LẠI */}
+      <div className="grid gap-5 md:grid-cols-3">
         {/* 1. Thẻ Ưu Tiên Hỗ Trợ */}
         <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5">
           <div>
@@ -247,12 +352,12 @@ export function ShopPage() {
                 <LifeBuoy size={20} aria-hidden="true" />
               </span>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900">
-                100 Credits / lần
+                {isAdmin ? 'Miễn phí (Admin)' : '100 Credits'}
               </span>
             </div>
             <h2 className="mt-3 text-base font-semibold text-slate-900">1. Thẻ Ưu Tiên Hỗ Trợ</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Gửi tín hiệu ưu tiên trực tiếp tới Quản đốc / Ban Tổ Chức để được hướng dẫn hoặc gỡ rối ngay một tình huống trong ca Workshop.
+              Gửi yêu cầu ưu tiên trực tiếp tới Quản đốc / Ban Tổ Chức để được hỗ trợ ngay trong ca Workshop.
             </p>
             <form
               id="support-perk-form"
@@ -263,12 +368,12 @@ export function ShopPage() {
               className="mt-3"
             >
               <label className="block text-xs font-medium text-slate-700">
-                Vấn đề bạn cần hỗ trợ ưu tiên
+                Nội dung cần hỗ trợ
                 <input
                   required
                   value={supportNote}
                   onChange={(e) => setSupportNote(e.target.value)}
-                  placeholder="VD: Cần hỗ trợ xử lý lệch số liệu ca QC / Lịch sản xuất..."
+                  placeholder="VD: Cần hỗ trợ xử lý ca QC..."
                   className="mt-1 block min-h-11 w-full rounded-md border border-slate-300 px-3 text-sm text-slate-900"
                 />
               </label>
@@ -277,10 +382,10 @@ export function ShopPage() {
           <button
             type="submit"
             form="support-perk-form"
-            disabled={redeem.isPending || profile.credits < 100}
+            disabled={redeem.isPending || effectiveCredits < 100}
             className="mt-4 min-h-11 w-full rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
           >
-            Kích hoạt Thẻ Hỗ Trợ (100 Credits)
+            Kích hoạt Thẻ Hỗ Trợ
           </button>
         </div>
 
@@ -292,23 +397,23 @@ export function ShopPage() {
                 <ArrowRightLeft size={20} aria-hidden="true" />
               </span>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900">
-                150 Credits / task
+                {isAdmin ? 'Miễn phí (Admin)' : '150 Credits'}
               </span>
             </div>
             <h2 className="mt-3 text-base font-semibold text-slate-900">2. Thẻ Đổi Công Việc (Schedule)</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Chọn 1 công việc đang giao cho bạn trong Lịch & Công việc (chưa hoàn thành) và chỉ định chuyển giao trực tiếp cho thành viên khác.
+              Chọn 1 task trong schedule và chỉ định chuyển giao cho thành viên khác.
             </p>
             <div className="mt-3 space-y-2.5">
               <label className="block text-xs font-medium text-slate-700">
-                Công việc của bạn cần chuyển
+                Công việc cần chuyển
                 <select
                   value={selectedTaskId}
                   onChange={(e) => setSelectedTaskId(e.target.value)}
                   className="mt-1 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900"
                 >
                   <option value="">
-                    {myTasks.length === 0 ? '-- Bạn hiện không có task nào đang chờ --' : '-- Chọn công việc --'}
+                    {myTasks.length === 0 ? '-- Chưa có task nào đang chờ --' : '-- Chọn công việc --'}
                   </option>
                   {myTasks.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -318,7 +423,7 @@ export function ShopPage() {
                 </select>
               </label>
               <label className="block text-xs font-medium text-slate-700">
-                Chỉ định người nhận công việc này
+                Chỉ định người nhận
                 <select
                   value={targetUserId}
                   onChange={(e) => setTargetUserId(e.target.value)}
@@ -336,7 +441,7 @@ export function ShopPage() {
           </div>
           <button
             type="button"
-            disabled={redeem.isPending || !selectedTaskId || !targetUserId || profile.credits < 150}
+            disabled={redeem.isPending || !selectedTaskId || !targetUserId || effectiveCredits < 150}
             onClick={() =>
               redeem.mutate({
                 key: 'swap_task',
@@ -345,56 +450,11 @@ export function ShopPage() {
             }
             className="mt-4 min-h-11 w-full rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
           >
-            Đổi Công Việc Ngay (150 Credits)
+            Đổi task Ngay
           </button>
         </div>
 
-        {/* 3. Chứng nhận "Super Star" (7 bậc kiểu LOL) */}
-        <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="inline-flex size-10 items-center justify-center rounded-lg bg-amber-100 text-amber-800">
-                <Shield size={20} aria-hidden="true" />
-              </span>
-              <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-950">
-                {nextRank ? `Bậc kế: ${nextRank.name} (${nextRank.cost} Credits)` : 'Đã đạt bậc Tối Đa'}
-              </span>
-            </div>
-            <h2 className="mt-3 text-base font-semibold text-slate-900">
-              3. Chứng Nhận "Super Star" (Khung & Huy Hiệu 7 Bậc)
-            </h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Mở khóa Khung viền vinh danh và Huy hiệu hiển thị ngay dưới tên của bạn trên thanh Topbar theo 7 bậc:
-            </p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {RANK_ORDER.map((r: RankMeta) => {
-                const active = currentRankMeta?.key === r.key
-                return (
-                  <span
-                    key={r.key}
-                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${r.badgeClass} ${
-                      active ? 'ring-2 ring-slate-900' : 'opacity-80'
-                    }`}
-                  >
-                    {r.name} ({r.cost})
-                  </span>
-                )
-              })}
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={redeem.isPending || !nextRank || profile.credits < (nextRank?.cost ?? 999999)}
-            onClick={() => redeem.mutate({ key: 'super_star_up' })}
-            className="mt-4 min-h-11 w-full rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
-          >
-            {nextRank
-              ? `Thăng lên bậc ${nextRank.name} (${nextRank.cost} Credits)`
-              : 'Đã đạt bậc Thách Đấu (Tối đa)'}
-          </button>
-        </div>
-
-        {/* 4. Thẻ Thăng Chức Manager */}
+        {/* 3. Thẻ Thăng Chức Manager */}
         <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5">
           <div>
             <div className="flex items-center justify-between">
@@ -402,32 +462,30 @@ export function ShopPage() {
                 <Crown size={20} aria-hidden="true" />
               </span>
               <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-900">
-                500 Credits
+                {isAdmin ? 'Miễn phí (Admin)' : '500 Credits'}
               </span>
             </div>
-            <h2 className="mt-3 text-base font-semibold text-slate-900">4. Thẻ Thăng Chức Manager</h2>
+            <h2 className="mt-3 text-base font-semibold text-slate-900">3. Thẻ Thăng Chức Manager</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Được gắn danh hiệu chính thức{' '}
-              <b className="text-slate-900">Manager - {profile.full_name}</b> cùng nhãn vương miện nổi bật trên thanh điều hướng.
+              Gắn huy hiệu vương miện và tiền tố <b className="text-slate-900">Manager - {profile.full_name}</b> nổi bật trên khung tên.
             </p>
-            <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-3">
-              <div className="text-xs text-slate-500">Xem trước hiển thị sau khi kích hoạt:</div>
-              <div className="mt-1">
-                <HonorPreview fullName={profile.full_name} rankTier={rankTier} isManager={true} compact />
-              </div>
-            </div>
           </div>
           <button
             type="button"
-            disabled={redeem.isPending || isManagerTag || profile.credits < 500}
+            disabled={redeem.isPending || (!isAdmin && (isManagerTag || effectiveCredits < 500))}
             onClick={() => redeem.mutate({ key: 'manager_promo' })}
             className="mt-4 min-h-11 w-full rounded-md bg-accent px-4 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
           >
-            {isManagerTag ? 'Đã sở hữu danh hiệu Manager' : 'Thăng chức Manager (500 Credits)'}
+            {isManagerTag
+              ? isAdmin
+                ? 'Bấm để Gỡ / Bật lại nhãn Manager'
+                : 'Đã sở hữu danh hiệu Manager'
+              : 'Thăng chức Manager ngay'}
           </button>
         </div>
       </div>
 
+      {/* Nhật ký */}
       <section aria-labelledby="perk-history-heading" className="rounded-xl border border-slate-200 bg-white p-5">
         <div className="flex items-center gap-2">
           <Sparkles size={18} className="text-accent" aria-hidden="true" />
