@@ -18,11 +18,24 @@ type User = {
   department_id: string | null
   is_active: boolean
   credits: number
+  rank_tier?: string | null
+  is_manager_tag?: boolean | null
 }
+
+const RANK_OPTIONS = [
+  { value: '', label: 'Không có khung' },
+  { value: 'bronze', label: 'Đồng' },
+  { value: 'silver', label: 'Bạc' },
+  { value: 'gold', label: 'Vàng' },
+  { value: 'emerald', label: 'Lục Bảo' },
+  { value: 'diamond', label: 'Kim Cương' },
+  { value: 'master', label: 'Cao Thủ' },
+  { value: 'challenger', label: 'Thách Đấu' },
+]
 
 const errMsg = (e: unknown) => (e as { message?: string })?.message ?? 'Có lỗi xảy ra. Thử lại sau.'
 const STATUS: Record<Code['status'], string> = { unused: 'Chưa dùng', used: 'Đã dùng', revoked: 'Đã thu hồi' }
-const field = 'min-h-11 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900'
+const field = 'min-h-11 rounded-md border border-slate-300 bg-white px-2.5 text-sm text-slate-900'
 
 function useDepartments() {
   return useQuery({
@@ -51,7 +64,6 @@ export function AdminCodes() {
   })
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-codes'] })
 
-  // Gợi ý mã tiếp theo dựa trên mã số lớn nhất đã có trong danh sách
   function suggestNextBase() {
     const numericCodes = codes
       .map((c) => c.code.trim())
@@ -105,7 +117,6 @@ export function AdminCodes() {
       setIssued(createdCodes.join('\n'))
       setBulk('')
       setError('')
-      // Tự động tăng mã bắt đầu cho lần bấm tiếp theo
       if (mode === 'range' && /^\d+$/.test(startCode.trim())) {
         const nextStart = BigInt(startCode.trim()) + BigInt(createdCodes.length)
         setStartCode(nextStart.toString().padStart(startCode.trim().length, '0'))
@@ -284,7 +295,7 @@ export function AdminCodes() {
 
 export function AdminUsers() {
   const qc = useQueryClient()
-  const { profile } = useAuth()
+  const { profile, refreshProfile } = useAuth()
   const { data: depts = [] } = useDepartments()
   const [error, setError] = useState('')
   const [flash, setFlash] = useState('')
@@ -294,11 +305,12 @@ export function AdminUsers() {
     queryFn: async () =>
       ((await supabase
         .from('profiles')
-        .select('id, employee_code, full_name, role, department_id, is_active, credits')
+        .select('id, employee_code, full_name, role, department_id, is_active, credits, rank_tier, is_manager_tag')
         .order('full_name')).data ?? []) as User[],
   })
 
-  const refreshAll = () => {
+  const refreshAll = async () => {
+    await refreshProfile()
     qc.invalidateQueries({ queryKey: ['admin-users'] })
     qc.invalidateQueries({ queryKey: ['members'] })
   }
@@ -311,7 +323,47 @@ export function AdminUsers() {
     onSuccess: () => {
       setError('')
       setFlash('')
-      refreshAll()
+      void refreshAll()
+    },
+    onError: (e) => setError(errMsg(e)),
+  })
+
+  // Cộng / trừ Credits chuẩn quy tắc bảo mật qua RPC admin_adjust_credits
+  const adjustCredits = useMutation({
+    mutationFn: async (v: { user: User; delta: number; reason?: string }) => {
+      const { data, error } = await supabase.rpc('admin_adjust_credits', {
+        p_user_id: v.user.id,
+        p_delta: v.delta,
+        p_reason: v.reason ?? 'Admin cấp phát Credits',
+      })
+      if (error) throw error
+      return { user: v.user, delta: v.delta, newCredits: data as number }
+    },
+    onSuccess: ({ user, delta, newCredits }) => {
+      setError('')
+      setFlash(
+        `Đã ${delta > 0 ? `cộng +${delta}` : `trừ ${delta}`} Credits cho "${user.full_name}". Số dư mới: ${newCredits} Credits.`,
+      )
+      void refreshAll()
+    },
+    onError: (e) => setError(errMsg(e)),
+  })
+
+  // Phong Manager & Cấp bậc Super Star qua RPC admin_set_user_honors
+  const setHonors = useMutation({
+    mutationFn: async (v: { user: User; rank_tier: string | null; is_manager: boolean }) => {
+      const { error } = await supabase.rpc('admin_set_user_honors', {
+        p_user_id: v.user.id,
+        p_rank_tier: v.rank_tier,
+        p_is_manager: v.is_manager,
+      })
+      if (error) throw error
+      return v.user
+    },
+    onSuccess: (u) => {
+      setError('')
+      setFlash(`Đã cập nhật danh hiệu Manager / Super Star cho "${u.full_name}".`)
+      void refreshAll()
     },
     onError: (e) => setError(errMsg(e)),
   })
@@ -325,16 +377,16 @@ export function AdminUsers() {
     onSuccess: (u) => {
       setError('')
       setFlash(`Đã xóa vĩnh viễn tài khoản "${u.full_name}" (${u.employee_code}). Toàn bộ nội dung đóng góp của họ vẫn được giữ lại.`)
-      refreshAll()
+      void refreshAll()
     },
     onError: (e) => setError(errMsg(e)),
   })
 
   return (
-    <div className="max-w-5xl">
-      <h1 className="text-xl font-semibold">Người dùng</h1>
+    <div className="max-w-6xl">
+      <h1 className="text-xl font-semibold">Quản trị Người dùng & Cấp phát Đặc quyền</h1>
       <p className="mt-1 text-sm text-slate-600">
-        Bỏ chọn <b>"Hoạt động"</b> để tạm ngưng (khóa) tài khoản. Sau khi tài khoản đã bị khóa, nút <b>"Xóa vĩnh viễn"</b> sẽ xuất hiện (mọi tin nhắn, công việc, tài liệu của họ vẫn được giữ nguyên).
+        Admin có <b>∞ Credits (Vô hạn)</b>, có thể cộng/trừ Credits cho bất kỳ ai, phong danh hiệu <b>Manager</b>, cấp khung <b>Super Star (7 bậc)</b>, hoặc <b>Khóa → Xóa vĩnh viễn</b> tài khoản.
       </p>
       {flash && <p role="status" className="mt-3 rounded-md bg-green-100 px-3 py-2 text-sm font-semibold text-green-900">{flash}</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
@@ -343,11 +395,10 @@ export function AdminUsers() {
         <table className="w-full text-left text-sm">
           <thead className="bg-slate-50 text-xs text-slate-600">
             <tr>
-              <th className="p-3">Mã ID</th>
-              <th className="p-3">Họ tên</th>
-              <th className="p-3">Phòng ban</th>
-              <th className="p-3">Vai trò</th>
-              <th className="p-3">Credits</th>
+              <th className="p-3">Mã ID & Họ tên</th>
+              <th className="p-3">Phòng ban & Vai trò</th>
+              <th className="p-3">Credits & Cấp phát</th>
+              <th className="p-3">Danh hiệu (Manager / Super Star)</th>
               <th className="p-3">Hoạt động</th>
               <th className="p-3">Xóa tài khoản</th>
             </tr>
@@ -355,39 +406,128 @@ export function AdminUsers() {
           <tbody>
             {users.map((u) => {
               const self = u.id === profile?.id
+              const isUserAdmin = u.role === 'admin'
               return (
                 <tr key={u.id} className={`border-t border-slate-100 ${!u.is_active ? 'bg-slate-50/70' : ''}`}>
-                  <td className="p-3 font-mono font-semibold">{u.employee_code}</td>
                   <td className="p-3">
-                    <div className="font-medium text-slate-900">{u.full_name}</div>
+                    <div className="font-mono text-xs font-semibold text-slate-500">{u.employee_code}</div>
+                    <div className="font-semibold text-slate-900">
+                      {u.is_manager_tag ? `Manager - ${u.full_name}` : u.full_name}
+                    </div>
                     {!u.is_active && <span className="text-xs font-semibold text-amber-800">Đang tạm khóa</span>}
                   </td>
+
                   <td className="p-3">
-                    <select
-                      aria-label={`Phòng ban của ${u.full_name}`}
-                      value={u.department_id ?? ''}
-                      onChange={(e) => update.mutate({ id: u.id, patch: { department_id: e.target.value || null } })}
-                      className={field}
-                    >
-                      <option value="">Chưa có</option>
-                      {depts.map((d) => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
+                    <div className="flex flex-col gap-1.5">
+                      <select
+                        aria-label={`Phòng ban của ${u.full_name}`}
+                        value={u.department_id ?? ''}
+                        onChange={(e) => update.mutate({ id: u.id, patch: { department_id: e.target.value || null } })}
+                        className={field}
+                      >
+                        <option value="">Chưa phân phòng</option>
+                        {depts.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        aria-label={`Vai trò của ${u.full_name}`}
+                        disabled={self}
+                        value={u.role}
+                        onChange={(e) => update.mutate({ id: u.id, patch: { role: e.target.value as User['role'] } })}
+                        className={field}
+                      >
+                        <option value="user">User</option>
+                        <option value="admin">Admin (Vô hạn Credits)</option>
+                      </select>
+                    </div>
                   </td>
+
                   <td className="p-3">
-                    <select
-                      aria-label={`Vai trò của ${u.full_name}`}
-                      disabled={self}
-                      value={u.role}
-                      onChange={(e) => update.mutate({ id: u.id, patch: { role: e.target.value as User['role'] } })}
-                      className={field}
-                    >
-                      <option value="user">User</option>
-                      <option value="admin">Admin</option>
-                    </select>
+                    <div className="font-bold text-slate-900">
+                      {isUserAdmin ? (
+                        <span className="text-amber-700">∞ Vô hạn ({u.credits})</span>
+                      ) : (
+                        <span>{u.credits} Credits</span>
+                      )}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        disabled={adjustCredits.isPending}
+                        onClick={() => adjustCredits.mutate({ user: u, delta: 100, reason: 'Thưởng nóng +100 Credits' })}
+                        className="min-h-9 rounded border border-green-300 bg-green-50 px-2 text-xs font-semibold text-green-800 hover:bg-green-100"
+                      >
+                        +100
+                      </button>
+                      <button
+                        type="button"
+                        disabled={adjustCredits.isPending}
+                        onClick={() => adjustCredits.mutate({ user: u, delta: 500, reason: 'Thưởng nóng +500 Credits' })}
+                        className="min-h-9 rounded border border-green-300 bg-green-50 px-2 text-xs font-semibold text-green-800 hover:bg-green-100"
+                      >
+                        +500
+                      </button>
+                      <button
+                        type="button"
+                        disabled={adjustCredits.isPending}
+                        onClick={() => {
+                          const raw = window.prompt(
+                            `Nhập số Credits muốn CỘNG (ví dụ: 250) hoặc TRỪ (ví dụ: -100) cho ${u.full_name}:`,
+                            '200',
+                          )
+                          if (!raw) return
+                          const delta = Number(raw.trim())
+                          if (Number.isNaN(delta) || delta === 0) {
+                            window.alert('Vui lòng nhập một số nguyên khác 0')
+                            return
+                          }
+                          adjustCredits.mutate({ user: u, delta, reason: 'Admin điều chỉnh trực tiếp' })
+                        }}
+                        className="min-h-9 rounded border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        ± Tùy chỉnh
+                      </button>
+                    </div>
                   </td>
-                  <td className="p-3 font-semibold">{u.credits}</td>
+
+                  <td className="p-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="flex min-h-9 cursor-pointer items-center gap-2 text-xs font-semibold text-slate-800">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(u.is_manager_tag)}
+                          onChange={(e) =>
+                            setHonors.mutate({
+                              user: u,
+                              rank_tier: u.rank_tier ?? null,
+                              is_manager: e.target.checked,
+                            })
+                          }
+                        />
+                        Gắn chức Manager
+                      </label>
+                      <select
+                        aria-label={`Bậc Super Star của ${u.full_name}`}
+                        value={u.rank_tier ?? ''}
+                        onChange={(e) =>
+                          setHonors.mutate({
+                            user: u,
+                            rank_tier: e.target.value || null,
+                            is_manager: Boolean(u.is_manager_tag),
+                          })
+                        }
+                        className={field}
+                      >
+                        {RANK_OPTIONS.map((r) => (
+                          <option key={r.value} value={r.value}>
+                            Super Star: {r.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </td>
+
                   <td className="p-3">
                     <label className="flex min-h-11 items-center gap-2">
                       <input
@@ -399,6 +539,7 @@ export function AdminUsers() {
                       <span className="text-xs text-slate-600">{u.is_active ? 'Đang mở' : 'Đã khóa'}</span>
                     </label>
                   </td>
+
                   <td className="p-3">
                     {!self && !u.is_active ? (
                       <button
@@ -407,7 +548,7 @@ export function AdminUsers() {
                         onClick={() => {
                           if (
                             window.confirm(
-                              `Xác nhận XÓA VĨNH VIỄN tài khoản "${u.full_name}" (Mã: ${u.employee_code})?\n\nLưu ý: Tài khoản đăng nhập sẽ bị xóa hẳn, nhưng toàn bộ tin nhắn, tài liệu và công việc người này từng tạo vẫn được giữ lại.`
+                              `Xác nhận XÓA VĨNH VIỄN tài khoản "${u.full_name}" (Mã: ${u.employee_code})?\n\nLưu ý: Tài khoản đăng nhập sẽ bị xóa hẳn, nhưng toàn bộ tin nhắn, tài liệu và công việc người này từng tạo vẫn được giữ lại.`,
                             )
                           ) {
                             deleteUser.mutate(u)

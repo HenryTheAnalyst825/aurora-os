@@ -143,7 +143,7 @@ export function ShopPage() {
   const { profile, refreshProfile } = useAuth()
   const qc = useQueryClient()
   const isAdmin = profile?.role === 'admin'
-
+  const effectiveCredits = isAdmin ? Number.MAX_SAFE_INTEGER : (profile?.credits ?? 0)
   const rankTier = (profile as { rank_tier?: string | null } | null)?.rank_tier ?? null
   const isManagerTag = Boolean((profile as { is_manager_tag?: boolean | null } | null)?.is_manager_tag)
   const nextRank = getNextRank(rankTier)
@@ -222,7 +222,7 @@ export function ShopPage() {
           </div>
           <div className="rounded-lg bg-slate-900 px-4 py-2.5 text-white">
             <div className="text-xs text-slate-300">Số dư khả dụng</div>
-            <div className="text-xl font-bold text-amber-400">{profile.credits} Credits</div>
+            <div className="text-xl font-bold text-amber-400">{isAdmin ? '∞ Vô hạn' : `${profile.credits} Credits`}</div>
           </div>
         </div>
       </div>
