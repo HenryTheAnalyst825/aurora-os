@@ -17,6 +17,7 @@ const errMsg = (e: unknown) => (e as { message?: string })?.message ?? 'Có lỗ
 export function DocumentsPage() {
   const { profile } = useAuth()
   const isAdmin = profile?.role === 'admin'
+  const canUpload = Boolean(profile) // Mở quyền upload tài liệu cho cả User và Admin
   const qc = useQueryClient()
   const folders = useQuery({ queryKey: ['folders'], queryFn: fetchFolders })
   const docs = useQuery({ queryKey: ['documents'], queryFn: fetchDocuments })
@@ -83,10 +84,16 @@ export function DocumentsPage() {
     <div className="max-w-5xl">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-xl font-semibold">Tài liệu và kho dữ liệu</h1>
-        {isAdmin && (
+        {canUpload && (
           <div className="ml-auto flex gap-2">
-            <button onClick={() => setShowFolders((v) => !v)} aria-expanded={showFolders} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">Thư mục</button>
-            <button onClick={() => setShowUpload((v) => !v)} aria-expanded={showUpload} className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white">Tiếp nhận tài liệu</button>
+            {isAdmin && (
+              <button onClick={() => setShowFolders((v) => !v)} aria-expanded={showFolders} className="min-h-11 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold">
+                Thư mục
+              </button>
+            )}
+            <button onClick={() => setShowUpload((v) => !v)} aria-expanded={showUpload} className="min-h-11 rounded-md bg-accent px-4 text-sm font-semibold text-white">
+              Tiếp nhận tài liệu
+            </button>
           </div>
         )}
       </div>
@@ -94,7 +101,11 @@ export function DocumentsPage() {
       {flash && <p role="status" className="mt-3 rounded-md bg-green-100 px-3 py-2 text-sm font-semibold text-green-900">{flash}</p>}
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
 
-      {isAdmin && showUpload && profile && <div className="mt-4"><UploadPanel folders={folders.data ?? []} depts={depts} userId={profile.id} /></div>}
+      {canUpload && showUpload && profile && (
+        <div className="mt-4">
+          <UploadPanel folders={folders.data ?? []} depts={depts} userId={profile.id} />
+        </div>
+      )}
 
       {isAdmin && showFolders && (
         <section aria-label="Quản lý thư mục" className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
@@ -143,12 +154,13 @@ export function DocumentsPage() {
         {docs.isSuccess && list.length === 0 && (
           <li className="p-4 text-sm text-slate-600">
             {docs.data.length === 0
-              ? isAdmin ? 'Chưa có tài liệu. Bấm Tiếp nhận tài liệu để tải file từ nhà cung cấp lên.' : 'Chưa có tài liệu. Tài liệu mới sẽ xuất hiện tại đây ngay khi được đăng.'
+              ? 'Chưa có tài liệu. Bấm Tiếp nhận tài liệu để tải file lên.'
               : 'Không có tài liệu phù hợp.'}
           </li>
         )}
         {list.map((d) => {
           const isNew = Date.now() - new Date(d.created_at).getTime() < NEW_MS
+          const canEditDoc = isAdmin || d.uploaded_by === profile?.id
           const meta = [folderName(d.folder_id) ?? 'Chưa phân loại', dname(d.department_id) ? `Chỉ phòng ${dname(d.department_id)}` : 'Mọi người', fmtSize(d.size_bytes), new Date(d.created_at).toLocaleDateString('vi-VN'), d.source ? `Nguồn: ${d.source}` : '', d.version > 1 ? `Phiên bản ${d.version}` : '', d.profiles?.full_name ? `Đăng bởi ${d.profiles.full_name}` : ''].filter(Boolean)
           return (
             <li key={d.id} className="flex flex-wrap items-center gap-3 p-4">
@@ -165,7 +177,7 @@ export function DocumentsPage() {
               <div className="flex gap-1">
                 {canPreview(d.file_name) && <button onClick={() => void open(d, true)} className="min-h-11 rounded-md border border-slate-300 px-3 text-sm font-semibold">Mở</button>}
                 <button onClick={() => void open(d, false)} className="min-h-11 rounded-md border border-slate-300 px-3 text-sm font-semibold">Tải xuống</button>
-                {isAdmin && <button onClick={() => setEditing(d)} className="min-h-11 rounded-md px-3 text-sm font-semibold text-accent">Sửa</button>}
+                {canEditDoc && <button onClick={() => setEditing(d)} className="min-h-11 rounded-md px-3 text-sm font-semibold text-accent">Sửa</button>}
               </div>
             </li>
           )

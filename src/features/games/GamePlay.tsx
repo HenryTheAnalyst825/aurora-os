@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../auth/AuthProvider'
 import { DEFAULT_CONFIG, fetchGameConfig, finishSession, friendlyError, startSession } from './api'
-import { GAME_BY_KEY, type GameMeta } from './config'
+import { GAMES, GAME_BY_KEY, type GameMeta } from './config'
 import { BinaryDesk, ProductionDesk, RndDesk, type Stamp } from './Desk'
 import { generate } from './generators'
 import { mulberry32, type Rng } from './rng'
@@ -39,12 +39,22 @@ function Timer({ endAt, total, onExpire }: { endAt: number; total: number; onExp
 }
 
 export function GamePlay() {
-  const { gameKey } = useParams()
-  const meta = gameKey ? GAME_BY_KEY[gameKey as GameKey] : undefined
+  const params = useParams()
+  const { pathname } = useLocation()
+  
+  // Tự động bắt mã game bất kể router.tsx đặt là :gameKey, :dept, :id hay lấy trực tiếp từ đuôi URL /games/...
+  const rawKey = decodeURIComponent(
+    params.gameKey || params.dept || params.id || pathname.split('/').filter(Boolean).pop() || ''
+  ).trim()
+
+  const meta =
+    GAME_BY_KEY[rawKey as GameKey] ??
+    GAMES.find((g) => g.key.toLowerCase() === rawKey.toLowerCase() || g.dept.toLowerCase() === rawKey.toLowerCase())
+
   if (!meta) {
     return (
       <div>
-        <p className="text-slate-700">Không tìm thấy game này.</p>
+        <p className="text-slate-700">Không tìm thấy game này (Mã: {rawKey || 'trống'}).</p>
         <Link to="/games" className="font-semibold text-accent underline">Về Trung tâm Giả lập</Link>
       </div>
     )
