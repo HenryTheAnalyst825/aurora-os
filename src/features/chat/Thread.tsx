@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Crown, Flame, Gem, Shield, Sparkles, Swords, Trophy } from 'lucide-react'
 import { useAuth } from '../auth/AuthProvider'
 import { fetchMembers } from '../tasks/api'
 import { STATUS_LABEL } from '../tasks/types'
@@ -13,10 +14,84 @@ const errMsg = (e: unknown) => (e as { message?: string })?.message ?? 'Có lỗ
 const fmt = (iso: string) => new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' })
 const size = (b: number) => (b > 1e6 ? `${(b / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1e3))} KB`)
 
-function MessageItem({ m, name, mine, admin, onChanged }: { m: Message; name: string; mine: boolean; admin: boolean; onChanged: () => void }) {
+// Định nghĩa hệ thống Khung LOL 7 bậc cho phần Chat
+const LOL_RANKS: Record<string, { name: string; avatarRing: string; avatarBg: string; gemBg: string; ribbonBg: string }> = {
+  bronze: {
+    name: 'ĐỒNG',
+    avatarRing: 'ring-2 ring-amber-700 border border-amber-500',
+    avatarBg: 'bg-gradient-to-br from-amber-900 to-stone-800 text-amber-100',
+    gemBg: 'bg-amber-700 text-amber-100',
+    ribbonBg: 'bg-gradient-to-r from-amber-800 to-amber-600 text-white border-amber-400',
+  },
+  silver: {
+    name: 'BẠC',
+    avatarRing: 'ring-2 ring-slate-300 border border-white',
+    avatarBg: 'bg-gradient-to-br from-slate-700 to-slate-800 text-white',
+    gemBg: 'bg-slate-500 text-white',
+    ribbonBg: 'bg-gradient-to-r from-slate-600 to-slate-400 text-slate-950 border-white',
+  },
+  gold: {
+    name: 'VÀNG',
+    avatarRing: 'ring-2 ring-yellow-400 border border-amber-200',
+    avatarBg: 'bg-gradient-to-br from-yellow-600 to-yellow-800 text-white',
+    gemBg: 'bg-yellow-500 text-slate-950',
+    ribbonBg: 'bg-gradient-to-r from-yellow-600 via-amber-300 to-yellow-600 text-slate-950 border-yellow-200',
+  },
+  emerald: {
+    name: 'LỤC BẢO',
+    avatarRing: 'ring-2 ring-emerald-400 border border-teal-200',
+    avatarBg: 'bg-gradient-to-br from-emerald-800 to-teal-900 text-white',
+    gemBg: 'bg-emerald-500 text-slate-950',
+    ribbonBg: 'bg-gradient-to-r from-emerald-700 to-teal-700 text-slate-950 border-emerald-200',
+  },
+  diamond: {
+    name: 'KIM CƯƠNG',
+    avatarRing: 'ring-2 ring-cyan-300 border border-white',
+    avatarBg: 'bg-gradient-to-br from-blue-900 via-cyan-500 to-indigo-950 text-white',
+    gemBg: 'bg-cyan-400 text-slate-950',
+    ribbonBg: 'bg-gradient-to-r from-blue-600 via-cyan-300 to-indigo-600 text-slate-950 border-white',
+  },
+  master: {
+    name: 'CAO THỦ',
+    avatarRing: 'ring-2 ring-fuchsia-400 border border-purple-200',
+    avatarBg: 'bg-gradient-to-br from-purple-950 via-fuchsia-600 to-rose-900 text-white',
+    gemBg: 'bg-fuchsia-500 text-white',
+    ribbonBg: 'bg-gradient-to-r from-purple-700 via-fuchsia-400 to-pink-600 text-slate-950 border-pink-200',
+  },
+  challenger: {
+    name: 'THÁCH ĐẤU',
+    avatarRing: 'ring-2 ring-amber-300 border border-cyan-200 shadow-[0_0_12px_rgba(251,191,36,0.8)]',
+    avatarBg: 'bg-gradient-to-br from-amber-500 via-red-600 to-cyan-500 text-white',
+    gemBg: 'bg-gradient-to-r from-amber-400 to-cyan-300 text-slate-950',
+    ribbonBg: 'bg-gradient-to-r from-amber-400 via-yellow-200 to-cyan-300 text-slate-950 border-white',
+  },
+}
+
+function RankChatIcon({ tier, size = 10 }: { tier: string; size?: number }) {
+  if (tier === 'challenger') return <Trophy size={size} aria-hidden="true" />
+  if (tier === 'master') return <Flame size={size} aria-hidden="true" />
+  if (tier === 'diamond' || tier === 'emerald') return <Gem size={size} aria-hidden="true" />
+  if (tier === 'gold') return <Sparkles size={size} aria-hidden="true" />
+  return <Swords size={size} aria-hidden="true" />
+}
+
+function MessageItem({
+  m,
+  member,
+  mine,
+  admin,
+  onChanged,
+}: {
+  m: Message
+  member?: { full_name: string; rank_tier?: string | null; is_manager_tag?: boolean | null }
+  mine: boolean
+  admin: boolean
+  onChanged: () => void
+}) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(m.content)
   const [err, setErr] = useState('')
+
   const save = useMutation({
     mutationFn: () => editMessage(m.id, text.trim()),
     onSuccess: () => {
@@ -36,15 +111,63 @@ function MessageItem({ m, name, mine, admin, onChanged }: { m: Message; name: st
     }
   }
 
+  const name = member?.full_name ?? 'Người dùng'
+  const rankKey = member?.rank_tier
+  const rank = rankKey ? LOL_RANKS[rankKey] : undefined
+  const isManager = Boolean(member?.is_manager_tag)
+  const displayName = isManager ? `Manager - ${name}` : name
+  const initials = name
+    .split(' ')
+    .filter(Boolean)
+    .slice(-2)
+    .map((w) => w[0]?.toUpperCase())
+    .join('') || 'AU'
+
   return (
     <li className="flex gap-3">
-      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
-        {name.split(' ').slice(-2).map((w) => w[0]).join('').toUpperCase()}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs text-slate-600">
-          <b className="text-slate-900">{name}</b> {fmt(m.created_at)}{m.edited_at && ' (đã sửa)'}
+      {/* Khung Avatar LOL thu nhỏ trong chat */}
+      <div className="relative flex shrink-0 items-center justify-center">
+        <div
+          className={`grid size-10 place-items-center rounded-full text-xs font-bold ${
+            rank ? `${rank.avatarBg} ${rank.avatarRing}` : 'bg-slate-200 text-slate-700'
+          }`}
+        >
+          {initials}
         </div>
+        {rank && rankKey && (
+          <span
+            className={`-bottom-1 absolute inline-flex items-center justify-center rounded-full border px-1 text-[8px] font-black ${rank.gemBg}`}
+          >
+            <RankChatIcon tier={rankKey} size={9} />
+          </span>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+          {isManager && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-orange-600 px-1 py-0.2 text-[9px] font-bold text-white">
+              <Crown size={9} aria-hidden="true" />
+              MGR
+            </span>
+          )}
+          <b className="text-slate-900">{displayName}</b>
+          
+          {/* Ruy-băng Rank thu nhỏ ngay cạnh tên người chat */}
+          {rank && rankKey && (
+            <span
+              className={`inline-flex items-center gap-0.5 rounded border px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider ${rank.ribbonBg}`}
+            >
+              <Shield size={9} aria-hidden="true" />
+              {rank.name}
+            </span>
+          )}
+
+          <span className="text-slate-400">·</span>
+          <span>{fmt(m.created_at)}</span>
+          {m.edited_at && ' (đã sửa)'}
+        </div>
+
         {editing ? (
           <form onSubmit={(e: FormEvent) => { e.preventDefault(); if (text.trim()) save.mutate() }} className="mt-1 flex gap-2">
             <label className="sr-only" htmlFor={`e${m.id}`}>Sửa tin nhắn</label>
@@ -84,14 +207,17 @@ export function Thread({ channelId }: { channelId: string }) {
   const qc = useQueryClient()
   const key = ['messages', channelId]
   const { data: members = [] } = useQuery({ queryKey: ['members'], queryFn: fetchMembers })
-  const names = useMemo(() => new Map(members.map((m) => [m.id, m.full_name])), [members])
+  
+  // Tạo Map ánh xạ user_id sang toàn bộ thông tin profile (họ tên, rank_tier, is_manager_tag)
+  const memberMap = useMemo(() => new Map(members.map((m) => [m.id, m])), [members])
+
   const q = useInfiniteQuery({
     queryKey: key,
     initialPageParam: undefined as number | undefined,
     queryFn: ({ pageParam }) => fetchMessages(channelId, pageParam),
     getNextPageParam: (last) => (last.length === PAGE ? last[last.length - 1].id : undefined),
   })
-  // Các trang xếp từ mới đến cũ; đảo lại để hiển thị cũ ở trên, mới ở dưới
+
   const messages = useMemo(() => (q.data?.pages.flat() ?? []).slice().reverse(), [q.data])
   const lastId = messages[messages.length - 1]?.id
   const bottom = useRef<HTMLDivElement>(null)
@@ -154,7 +280,7 @@ export function Thread({ channelId }: { channelId: string }) {
             <MessageItem
               key={m.id}
               m={m}
-              name={names.get(m.user_id) ?? 'Người dùng'}
+              member={memberMap.get(m.user_id)}
               mine={m.user_id === profile?.id}
               admin={profile?.role === 'admin'}
               onChanged={() => qc.invalidateQueries({ queryKey: key })}

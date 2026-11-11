@@ -120,11 +120,11 @@ export function LolHonorBanner({
               className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider shadow ${rank.ribbonBg}`}
             >
               <Shield size={11} aria-hidden="true" />
-              KHUNG {rank.name} · {rank.title}
+            {rank.name} · {rank.title}
             </span>
           </div>
         ) : (
-          <span className="mt-0.5 text-xs text-slate-300">Chưa trang bị khung Rank</span>
+          <span className="mt-0.5 text-xs text-slate-300">Chưa có Rank</span>
         )}
       </div>
     </div>
@@ -227,14 +227,14 @@ export function ShopPage() {
       {/* Header & Khung LOL hiện tại của người dùng */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-5">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Trạm Đặc Quyền & Khung Danh Hiệu (Workshop Perks)</h1>
+          <h1 className="text-xl font-semibold text-slate-900">Trạm Đặc Quyền & Danh Hiệu (Workshop Perks)</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Chọn bất kỳ bậc Khung Super Star (Đồng → Thách Đấu) kiểu LOL để trang bị ngay dưới tên của bạn, hoặc sử dụng các đặc quyền điều phối công việc.
+            Chọn bất kỳ bậc Super Star (Đồng → Thách Đấu) kiểu LOL để trang bị ngay dưới tên của bạn, hoặc sử dụng các đặc quyền điều phối công việc.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <div>
-            <div className="mb-1 text-xs font-semibold text-slate-500">Khung danh hiệu hiện tại của bạn:</div>
+            <div className="mb-1 text-xs font-semibold text-slate-500">Danh hiệu hiện tại của bạn:</div>
             <LolHonorBanner fullName={profile.full_name} rankTier={currentRankTier} isManager={isManagerTag} />
           </div>
           <div className="rounded-xl bg-slate-900 px-4 py-3 text-white">
@@ -266,10 +266,10 @@ export function ShopPage() {
               HỆ THỐNG KHUNG & HUY HIỆU 7 BẬC
             </span>
             <h2 className="mt-2 text-lg font-bold text-white">
-              Chứng Nhận "Super Star" — Chọn Bất Kỳ Khung Rank Nào Bạn Muốn!
+              Chứng Nhận "Super Star" — Chọn Bất Kỳ Rank Nào Bạn Muốn!
             </h2>
             <p className="mt-1 text-sm text-slate-300">
-              Bấm vào một bậc bên dưới để xem trước Khung Avatar + Ruy-băng Danh Hiệu, sau đó bấm <b>Trang bị ngay</b>.
+              Bấm vào một bậc bên dưới để xem trước Khung Avatar + Danh Hiệu, sau đó bấm <b>Trang bị ngay</b>.
             </p>
           </div>
 
@@ -319,7 +319,7 @@ export function ShopPage() {
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
           <div className="text-sm text-slate-300">
-            Bậc đang chọn: <b className="text-amber-300">Khung {selectedRankMeta.name} ({selectedRankMeta.title})</b> · Chi phí:{' '}
+            Bậc đang chọn: <b className="text-amber-300">{selectedRankMeta.name} ({selectedRankMeta.title})</b> · Chi phí:{' '}
             <b className="text-white">{isAdmin ? 'Miễn phí (Admin ∞)' : `${selectedRankMeta.cost} Credits`}</b>
           </div>
           <button
@@ -336,8 +336,8 @@ export function ShopPage() {
             {redeem.isPending
               ? 'Đang trang bị…'
               : currentRankTier === selectedTier
-              ? `Cập nhật lại Khung ${selectedRankMeta.name}`
-              : `Trang bị ngay Khung ${selectedRankMeta.name} (${isAdmin ? 'Miễn phí' : `${selectedRankMeta.cost} Credits`})`}
+              ? `Cập nhật lại ${selectedRankMeta.name}`
+              : `Trang bị ngay ${selectedRankMeta.name} (${isAdmin ? 'Miễn phí' : `${selectedRankMeta.cost} Credits`})`}
           </button>
         </div>
       </div>
