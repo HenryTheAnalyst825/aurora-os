@@ -15,11 +15,11 @@ import { RequireAuth } from './RequireAuth'
 import SupportPage from '../features/Support/SupportPage'
 import ReportsPage from '../features/Support/ReportsPage'
 import NotificationsPage from '../features/notifications/NotificationsPage'
+import { ShopPage } from '../features/shop/ShopPage'
 
 const PAGES: [string, string][] = [
   ['quiz', 'Quiz'],
   ['quests', 'Nhiệm vụ'],
-  ['shop', 'Cửa hàng'],
   ['proposals', 'Đề xuất'],
   ['wall', 'Tường cải tiến'],
   ['members', 'Thành viên'],
@@ -30,6 +30,7 @@ export const router = createBrowserRouter([
   { path: '/register', element: <RegisterPage /> },
   { path: '/forgot', element: <ForgotPage /> },
   { path: '/reset', element: <ResetPage /> },
+  
   {
     element: <RequireAuth />,
     children: [
@@ -44,6 +45,8 @@ export const router = createBrowserRouter([
           { path: 'leaderboard', element: <LeaderboardPage /> },
           { path: 'documents', element: <DocumentsPage /> },
           { path: 'docs', element: <DocumentsPage /> },
+          // Cửa hàng Workshop Perks
+          { path: 'shop', element: <ShopPage /> },
 
           // Chat routes với đầy đủ param nhận channelId
           { path: 'chat', element: <ChatPage /> },
