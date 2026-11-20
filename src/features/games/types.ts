@@ -1,4 +1,13 @@
-export type GameKey = 'accounting' | 'qc' | 'hr' | 'ehs' | 'production' | 'rnd'
+export type LegacyGameKey = 'accounting' | 'qc' | 'hr' | 'ehs' | 'production' | 'rnd'
+export type ScenarioGameKey =
+  | 'audit_bingo'
+  | 'hr_escape'
+  | 'assumption_alert'
+  | 'meeting_observer'
+  | 'leadership_90d'
+  | 'myth_fact'
+
+export type GameKey = LegacyGameKey | ScenarioGameKey
 
 export type Row = { label: string; value: string }
 export type Section = { title: string; rows: Row[] }

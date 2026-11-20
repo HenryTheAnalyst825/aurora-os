@@ -1,5 +1,5 @@
 import { chance, int, pick, type Rng } from './rng'
-import type { BinaryCase, Case, GameKey, ProductionCase, RndCase, Section } from './types'
+import type { BinaryCase, Case, LegacyGameKey, ProductionCase, RndCase, Section } from './types'
 
 export const FLAW_RATE = 0.4 // khoảng 40% hồ sơ bị sai lệch
 const vnd = (n: number) => n.toLocaleString('vi-VN') + ' ₫'
@@ -302,7 +302,7 @@ function rnd(r: Rng): RndCase {
   return { kind: 'rnd', ingredients, target: 84, tolerance: 3, budget: 64300, solution: [30, 40, 30], reference: [sec('Mục tiêu công thức', [['Độ bền mục tiêu', '84,0 MPa (sai số ±3)'], ['Chi phí tối đa', `${vnd(64300)}/kg`]])] }
 }
 
-export function generate(game: GameKey, r: Rng): Case {
+export function generate(game: LegacyGameKey, r: Rng): Case {
   switch (game) {
     case 'accounting': return accounting(r)
     case 'qc': return qc(r)

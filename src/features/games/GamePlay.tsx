@@ -7,7 +7,8 @@ import { GAMES, GAME_BY_KEY, type GameMeta } from './config'
 import { BinaryDesk, ProductionDesk, RndDesk, type Stamp } from './Desk'
 import { generate } from './generators'
 import { mulberry32, type Rng } from './rng'
-import type { Case, FinishResult, GameKey } from './types'
+import { ScenarioGameDesk } from './ScenarioGames'
+import type { Case, FinishResult, GameKey, LegacyGameKey, ScenarioGameKey } from './types'
 
 const POINTS_RIGHT = 10
 const POINTS_WRONG = 5
@@ -32,7 +33,10 @@ function Timer({ endAt, total, onExpire }: { endAt: number; total: number; onExp
     <div role="timer" aria-label="Thời gian còn lại" className="min-w-40">
       <div className={`text-right text-2xl font-bold tabular-nums ${secs <= 10 ? 'text-red-700' : ''}`}>{secs}s</div>
       <div className="h-1.5 rounded-full bg-slate-200">
-        <div className={`h-full rounded-full ${secs <= 10 ? 'bg-red-600' : 'bg-accent'}`} style={{ width: `${Math.min(100, (left / (total * 1000)) * 100)}%` }} />
+        <div
+          className={`h-full rounded-full ${secs <= 10 ? 'bg-red-600' : 'bg-accent'}`}
+          style={{ width: `${Math.min(100, (left / (total * 1000)) * 100)}%` }}
+        />
       </div>
     </div>
   )
@@ -41,8 +45,7 @@ function Timer({ endAt, total, onExpire }: { endAt: number; total: number; onExp
 export function GamePlay() {
   const params = useParams()
   const { pathname } = useLocation()
-  
-  // Tự động bắt mã game bất kể router.tsx đặt là :gameKey, :dept, :id hay lấy trực tiếp từ đuôi URL /games/...
+
   const rawKey = decodeURIComponent(
     params.gameKey || params.dept || params.id || pathname.split('/').filter(Boolean).pop() || ''
   ).trim()
@@ -106,7 +109,9 @@ function Play({ meta }: { meta: GameMeta }) {
       setResult(null)
       setSendError('')
       setSeconds(s.seconds)
-      setCur(generate(meta.key, rng.current))
+
+      // Nếu là 6 game tình huống mới (mode === 'scenario') thì không dùng generator ngẫu nhiên cũ
+      setCur(meta.mode === 'scenario' ? null : generate(meta.key as LegacyGameKey, rng.current))
       setCaseNo(1)
       setEndAt(Date.now() + s.seconds * 1000)
       setPhase('playing')
@@ -144,7 +149,9 @@ function Play({ meta }: { meta: GameMeta }) {
     timeout.current = setTimeout(() => {
       if (finished.current) return
       setStamp(null)
-      setCur(generate(meta.key, rng.current))
+      if (meta.mode !== 'scenario') {
+        setCur(generate(meta.key as LegacyGameKey, rng.current))
+      }
       setCaseNo((n) => n + 1)
       locked.current = false
     }, delay)
@@ -271,9 +278,28 @@ function Play({ meta }: { meta: GameMeta }) {
         </dl>
         <div className="ml-auto"><Timer endAt={endAt} total={seconds} onExpire={finish} /></div>
       </div>
+
       {cur?.kind === 'binary' && <BinaryDesk key={caseNo} c={cur} meta={meta} stamp={stamp} disabled={!!stamp} onDecide={decide} />}
       {cur?.kind === 'production' && <ProductionDesk key={caseNo} c={cur} meta={meta} stamp={stamp} disabled={!!stamp} onSubmit={submitPuzzle} onSkip={skip} />}
       {cur?.kind === 'rnd' && <RndDesk key={caseNo} c={cur} meta={meta} stamp={stamp} disabled={!!stamp} onSubmit={submitPuzzle} onSkip={skip} />}
+
+      {/* Giao diện cho 6 mini-game tình huống mới */}
+      {meta.mode === 'scenario' && (
+        <ScenarioGameDesk
+          gameKey={meta.key as ScenarioGameKey}
+          disabled={phase !== 'playing'}
+          onRecord={(ok, reason) => {
+            counts.current = {
+              correct: counts.current.correct + (ok ? 1 : 0),
+              wrong: counts.current.wrong + (ok ? 0 : 1),
+            }
+            setStats({ ...counts.current })
+            setLast({ ok, reason })
+          }}
+          onCompleteAll={finish}
+        />
+      )}
+
       <p role="status" className={`min-h-6 text-sm font-medium ${last?.ok ? 'text-green-800' : 'text-red-800'}`}>
         {last && `${last.ok ? `+${POINTS_RIGHT} Đúng` : `−${POINTS_WRONG} Sai`}: ${last.reason}`}
       </p>

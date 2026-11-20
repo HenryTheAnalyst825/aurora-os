@@ -1,4 +1,18 @@
-import { Factory, FlaskConical, HardHat, Receipt, Ruler, UserCheck, type LucideIcon } from 'lucide-react'
+import {
+  AlertTriangle,
+  Compass,
+  Eye,
+  Factory,
+  FlaskConical,
+  Grid3X3,
+  HardHat,
+  HelpCircle,
+  Lock,
+  Receipt,
+  Ruler,
+  UserCheck,
+  type LucideIcon,
+} from 'lucide-react'
 import type { GameKey } from './types'
 
 export type GameMeta = {
@@ -7,7 +21,7 @@ export type GameMeta = {
   title: string
   blurb: string
   icon: LucideIcon
-  mode: 'binary' | 'production' | 'rnd'
+  mode: 'binary' | 'production' | 'rnd' | 'scenario'
   approveLabel?: string
   rejectLabel?: string
   leftTitle: string
@@ -51,6 +65,63 @@ export const GAMES: GameMeta[] = [
     blurb: 'Chọn tỷ lệ phối trộn nguyên liệu để đạt độ bền mục tiêu mà không vượt chi phí.',
     leftTitle: 'Yêu cầu công thức', rightTitle: 'Bàn pha trộn',
     rules: ['Chọn tỷ lệ % cho hai nguyên liệu đầu, nguyên liệu thứ ba tự lấy phần còn lại.', 'Độ bền phải trong sai số cho phép và chi phí không vượt trần.', 'Bấm Bỏ qua nếu bí (không mất điểm).'],
+  },
+
+  // --- 6 MINI-GAME TÌNH HUỐNG VẬN HÀNH & RA QUYẾT ĐỊNH THỰC TẾ ---
+  {
+    key: 'audit_bingo', dept: 'EHS', title: 'Audit Bingo: Rà Soát Chốt Chặn', icon: Grid3X3, mode: 'scenario',
+    blurb: 'Thẩm định bằng chứng thực tế trên lưới 3x3 để phát hiện lỗ hổng quy trình và an toàn ẩn.',
+    leftTitle: 'Bảng kiểm toán 3x3', rightTitle: 'Bằng chứng hiện trường',
+    rules: [
+      'Bấm chọn từng ô trong 9 hạng mục vận hành để đọc bằng chứng ghi nhận tại xưởng.',
+      'Phân loại chính xác đâu là Chốt chặn Đạt chuẩn và đâu là Rủi ro ẩn.',
+      'Hoàn thành toàn bộ 9 ô để tổng kết điểm và nhận Aurora Credits.',
+    ],
+  },
+  {
+    key: 'hr_escape', dept: 'HR', title: 'HR Escape Room: Giải Mã Hồ Sơ', icon: Lock, mode: 'scenario',
+    blurb: 'Phá giải 5 tình huống lương thưởng, thăng chức và tuyển dụng để tìm mật mã mở khóa.',
+    leftTitle: 'Hồ sơ nhân sự mật', rightTitle: 'Bảng nhập mật mã 5 số',
+    rules: [
+      'Phân tích dữ kiện trong từng hồ sơ nhân sự để phát hiện bất cập và tìm ra con số mật mã.',
+      'Giải đúng lần lượt 5 hồ sơ để mở khóa toàn bộ 5 chữ số thoát phòng.',
+    ],
+  },
+  {
+    key: 'assumption_alert', dept: 'HR', title: 'Assumption Alert: Bắt Lỗi Giả Định', icon: AlertTriangle, mode: 'scenario',
+    blurb: 'Nhận diện các giả định cảm tính và định kiến ngầm trong giao tiếp công việc hàng ngày.',
+    leftTitle: 'Bối cảnh giao tiếp', rightTitle: 'Phân loại phát ngôn',
+    rules: [
+      'Đọc kỹ từng phát ngôn trong cuộc họp và trao đổi công việc hàng ngày.',
+      'Bấm "Bắt lỗi Giả định / Định kiến" nếu phát ngôn mang tính chủ quan, hoặc xác nhận "Giao tiếp Khách quan".',
+    ],
+  },
+  {
+    key: 'meeting_observer', dept: 'Sản xuất', title: 'Meeting Observer: Điểm Mù Cuộc Họp', icon: Eye, mode: 'scenario',
+    blurb: 'Quan sát diễn biến cuộc họp dự án và chỉ ra các điểm nghẽn phối hợp liên phòng ban.',
+    leftTitle: 'Diễn biến cuộc họp', rightTitle: 'Đánh giá điều phối',
+    rules: [
+      'Theo dõi từng tình huống diễn ra xuyên suốt cuộc họp dự án.',
+      'Chọn đúng hành vi đang làm giảm hiệu quả hoặc xác nhận cách điều phối minh bạch.',
+    ],
+  },
+  {
+    key: 'leadership_90d', dept: 'Tài chính', title: '90-Day Plant Leader: Điều Hành 90 Ngày', icon: Compass, mode: 'scenario',
+    blurb: 'Cân bằng 3 chỉ số Hiệu suất – An toàn – Gắn kết qua 3 chặng điều hành nhà máy.',
+    leftTitle: 'Bảng chỉ số KPI nhà máy', rightTitle: 'Quyết định điều hành',
+    rules: [
+      'Đưa ra quyết định quản trị qua 3 giai đoạn: Ngày 1–30, Ngày 31–60 và Ngày 61–90.',
+      'Giữ cho cả 3 chỉ số Hiệu suất, An toàn & Chất lượng, và Gắn kết nhân sự tăng trưởng bền vững.',
+    ],
+  },
+  {
+    key: 'myth_fact', dept: 'QC', title: 'Myth or Fact: Lầm Tưởng Hay Sự Thật?', icon: HelpCircle, mode: 'scenario',
+    blurb: 'Phân loại nhanh các nhận định phổ biến về năng suất, an toàn và quản trị vận hành.',
+    leftTitle: 'Nhận định thực tế', rightTitle: 'Kiểm chứng dữ liệu',
+    rules: [
+      'Đọc nhanh từng nhận định về vận hành sản xuất và quản trị con người.',
+      'Chọn Lầm tưởng (Myth) hoặc Sự thật (Fact) và xem giải thích dựa trên dữ liệu thực tế.',
+    ],
   },
 ]
 
