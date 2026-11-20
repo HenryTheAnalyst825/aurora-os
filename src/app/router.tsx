@@ -16,9 +16,9 @@ import SupportPage from '../features/Support/SupportPage'
 import ReportsPage from '../features/Support/ReportsPage'
 import NotificationsPage from '../features/notifications/NotificationsPage'
 import { ShopPage } from '../features/shop/ShopPage'
+import { QuizPage } from '../features/quiz/QuizPage'
 
 const PAGES: [string, string][] = [
-  ['quiz', 'Quiz'],
   ['quests', 'Nhiệm vụ'],
   ['proposals', 'Đề xuất'],
   ['wall', 'Tường cải tiến'],
@@ -47,6 +47,8 @@ export const router = createBrowserRouter([
           { path: 'docs', element: <DocumentsPage /> },
           // Cửa hàng Workshop Perks
           { path: 'shop', element: <ShopPage /> },
+          // Quizgame
+          { path: 'quiz', element: <QuizPage /> },
 
           // Chat routes với đầy đủ param nhận channelId
           { path: 'chat', element: <ChatPage /> },
