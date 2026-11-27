@@ -14,6 +14,23 @@ export function markDocsSeen(uid: string, qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ['docs-new'] })
 }
 
+// Lấy department_id hiện tại của người dùng từ bảng profiles
+export function useMyDepartmentId() {
+  const { profile } = useAuth()
+  return useQuery({
+    queryKey: ['my-department-id', profile?.id],
+    enabled: !!profile,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('department_id')
+        .eq('id', profile!.id)
+        .single()
+      return (data?.department_id as string | null) ?? null
+    },
+  })
+}
+
 // Số tài liệu mới (do người khác tải lên) kể từ lần xem gần nhất, hiện ở menu bên trái
 export function useNewDocsCount() {
   const { profile } = useAuth()
@@ -29,7 +46,11 @@ export function useNewDocsCount() {
         /* bỏ qua */
       }
       if (!since) return 0
-      const { count } = await supabase.from('documents').select('id', { count: 'exact', head: true }).gt('created_at', since).neq('uploaded_by', profile!.id)
+      const { count } = await supabase
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .gt('created_at', since)
+        .neq('uploaded_by', profile!.id)
       return count ?? 0
     },
   })
