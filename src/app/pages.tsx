@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../features/auth/AuthProvider'
-import { fetchDocuments, signedUrl } from '../features/documents/api'
 import { canPreview, fmtSize } from '../features/documents/files'
 import { useMyDepartmentId } from '../features/documents/hooks'
 import type { Dept, DocRow } from '../features/documents/types'
