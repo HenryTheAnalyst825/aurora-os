@@ -366,9 +366,16 @@ export function ProjectsPage() {
         d.uploaded_by === profile?.id ||
         !d.department_id ||
         (myDeptId !== null && d.department_id === myDeptId)
-      if (!canSee || !d.department_id) return false
-      const deptName = depts.find((x) => x.id === d.department_id)?.name?.toLowerCase() ?? ''
-      return brief.matchKeywords.some((kw) => deptName.includes(kw))
+      if (!canSee) return false
+
+      const deptName = (
+        depts.find((x) => x.id === d.department_id)?.name ?? ''
+      ).toLowerCase()
+      const fileLabel = `${d.title ?? ''} ${d.file_name ?? ''}`.toLowerCase()
+
+      return brief.matchKeywords.some(
+        (kw) => deptName.includes(kw) || fileLabel.includes(kw)
+      )
     })
   }, [docsQuery.data, depts, brief.matchKeywords, isAdmin, profile?.id, myDeptId])
 
@@ -481,23 +488,38 @@ export function ProjectsPage() {
               <p className="text-sm leading-relaxed text-slate-600">{brief.mission}</p>
             </div>
 
-            {deptFiles.length > 0 && (
-              <div className="space-y-2 rounded-xl border border-teal-200 bg-teal-50/50 p-4">
+            {/* Khung Tệp dữ liệu gốc đính kèm của phòng ban (luôn hiển thị rõ) */}
+            <div className="space-y-2.5 rounded-xl border border-teal-200 bg-teal-50/50 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-extrabold uppercase tracking-wide text-teal-900">
                   Tệp dữ liệu gốc đính kèm ({brief.tabLabel})
                 </div>
-                {fileError && <p className="text-xs font-semibold text-red-700">{fileError}</p>}
+                {isAdmin && (
+                  <Link
+                    to="/documents"
+                    className="text-[11px] font-bold text-teal-700 hover:underline"
+                  >
+                    + Tải thêm file gốc lên Kho tài liệu →
+                  </Link>
+                )}
+              </div>
+
+              {fileError && <p className="text-xs font-semibold text-red-700">{fileError}</p>}
+
+              {deptFiles.length > 0 ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   {deptFiles.map((doc) => (
                     <div
                       key={doc.id}
-                      className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs"
+                      className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-white px-3 py-2.5 text-xs"
                     >
                       <div className="flex min-w-0 items-center gap-2">
-                        <FileText size={15} className="shrink-0 text-teal-600" />
+                        <FileText size={16} className="shrink-0 text-teal-600" />
                         <div className="min-w-0">
                           <div className="truncate font-bold text-slate-900">{doc.title}</div>
-                          <div className="text-[11px] text-slate-500">{fmtSize(doc.size_bytes)}</div>
+                          <div className="text-[11px] text-slate-500">
+                            {doc.file_name} · {fmtSize(doc.size_bytes)}
+                          </div>
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-1">
@@ -505,7 +527,7 @@ export function ProjectsPage() {
                           <button
                             type="button"
                             onClick={() => void openOriginalFile(doc.storage_path, doc.file_name, true)}
-                            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                           >
                             <ExternalLink size={11} /> Mở
                           </button>
@@ -513,16 +535,22 @@ export function ProjectsPage() {
                         <button
                           type="button"
                           onClick={() => void openOriginalFile(doc.storage_path, doc.file_name, false)}
-                          className="inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-[11px] font-bold text-white hover:bg-slate-800"
+                          className="inline-flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-800"
                         >
-                          <Download size={11} /> Tải
+                          <Download size={11} /> Tải về
                         </button>
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-xs text-slate-600">
+                  {docsQuery.isLoading
+                    ? 'Đang kiểm tra tệp gốc trên hệ thống…'
+                    : 'Chưa có tệp gốc được gắn cho phòng ban này (hoặc bạn chưa có quyền truy cập phòng này).'}
+                </p>
+              )}
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {brief.metrics.map((m) => (
