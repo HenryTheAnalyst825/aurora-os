@@ -1,472 +1,335 @@
-import { Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
+  Activity,
+  AlertTriangle,
   ArrowRight,
-  Award,
-  BookOpen,
-  CheckCircle2,
-  ClipboardList,
-  Crown,
-  FileText,
-  Gamepad2,
-  HelpCircle,
-  Megaphone,
-  MessageSquare,
-  Shield,
-  ShoppingBag,
-  Sparkles,
-  Trophy,
+  Clock,
+  Layers,
+  ShieldAlert,
+  Target,
 } from 'lucide-react'
-import { supabase } from '../lib/supabase'
 import { useAuth } from '../features/auth/AuthProvider'
 
-type Announcement = {
-  id: string
-  title: string
-  body?: string | null
-  content?: string | null
-  created_at: string
-  is_pinned?: boolean
-}
+type StationId = 'ST-01' | 'ST-02' | 'ST-03' | 'ST-04'
 
-type LeaderboardEntry = {
-  id: string
-  full_name: string
-  credits: number
-  rank_tier?: string | null
-  is_manager_tag?: boolean | null
-  departments?: { name: string } | null
-}
+const STATIONS: {
+  id: StationId
+  code: string
+  name: string
+  stops: string
+  note: string
+  tone: 'neutral' | 'warning' | 'danger'
+  rawLogs: string[]
+}[] = [
+  {
+    id: 'ST-01',
+    code: 'TRẠM ST-01 · FEEDING',
+    name: 'Cấp Phôi & Định Hình',
+    stops: 'Log dừng: 24 lần · 740 phút',
+    note: 'Bấm xem log chi tiết →',
+    tone: 'neutral',
+    rawLogs: [
+      'Ghi nhận 18 lần dừng vặt (< 5 phút) do lệch băng dẫn phôi đầu vào ở đầu ca sáng và ca đêm.',
+      'Thời gian chờ cấp cuộn vật liệu mới trung bình 14 phút/lần khi chuyển mã sản phẩm.',
+      'Chưa ghi nhận sự cố mất an toàn lao động trực tiếp tại cụm cấp phôi.',
+    ],
+  },
+  {
+    id: 'ST-02',
+    code: 'TRẠM ST-02 · FORMING',
+    name: 'Gia Công Chính Xác',
+    stops: 'Log dừng: 46 lần · 1.680 phút',
+    note: 'Bấm xem log chi tiết →',
+    tone: 'warning',
+    rawLogs: [
+      'Chiếm tỷ trọng thời gian dừng máy cao nhất trên Line 3 (1.680 / 4.060 phút dừng máy).',
+      'Gồm 18 lần chuyển đổi khuôn (Changeover) tiêu tốn 1.420 phút và 28 lần kẹt cơ khí/quá nhiệt.',
+      'Tổn thất tốc độ (Speed loss) ghi nhận nhiều nhất khi chạy vật liệu lô mới.',
+    ],
+  },
+  {
+    id: 'ST-03',
+    code: 'TRẠM ST-03 · INSPECTION',
+    name: 'Kiểm Tra & Cảm Biến',
+    stops: 'Log dừng: 31 lần · 1.090 phút',
+    note: '56 mẫu bị từ chối · 6 Near-Miss',
+    tone: 'danger',
+    rawLogs: [
+      'Phát hiện 56 mẫu sản phẩm không đạt dung sai kích thước và độ kín khớp nối trong 26 ca khảo sát.',
+      'Ghi nhận 6 vụ suýt tai nạn (Near-Miss) khi vận hành viên thao tác gạt phôi lỗi gần cụm cảm biến.',
+      'Cảm biến quang học báo dừng giả 22 lần khi bụi mịn tích tụ cuối ca.',
+    ],
+  },
+  {
+    id: 'ST-04',
+    code: 'TRẠM ST-04 · PACKING',
+    name: 'Đóng Gói & Xuất Xưởng',
+    stops: 'Log dừng: 17 lần · 550 phút',
+    note: 'Bấm xem log chi tiết →',
+    tone: 'neutral',
+    rawLogs: [
+      '17 lần dừng chủ yếu do chờ bán thành phẩm từ các trạm phía trước (Starvation) và thay cuộn tem nhãn.',
+      'Tốc độ đóng gói thực tế đạt 92% công suất thiết kế khi nguồn phôi đầu vào ổn định.',
+    ],
+  },
+]
 
-type CasePreview = {
-  id: string
-  tag_code: string
-  department_tag: string
-  title: string
-  reward_credits: number
-}
-
-const RANK_META: Record<string, { label: string; badge: string }> = {
-  bronze: { label: 'Đồng', badge: 'bg-amber-100 text-amber-900 border-amber-300' },
-  silver: { label: 'Bạc', badge: 'bg-slate-200 text-slate-900 border-slate-400' },
-  gold: { label: 'Vàng', badge: 'bg-yellow-100 text-yellow-900 border-yellow-400' },
-  emerald: { label: 'Lục Bảo', badge: 'bg-emerald-100 text-emerald-900 border-emerald-400' },
-  diamond: { label: 'Kim Cương', badge: 'bg-cyan-100 text-cyan-900 border-cyan-400' },
-  master: { label: 'Cao Thủ', badge: 'bg-purple-100 text-purple-900 border-purple-400' },
-  challenger: { label: 'Thách Đấu', badge: 'bg-amber-200 text-slate-950 border-amber-500' },
-}
-
-async function fetchDashboardOverview(userId?: string) {
-  const [progressRes, tasksRes, announcementsRes, topUsersRes, casesRes] = await Promise.all([
-    supabase.rpc('factory_progress'),
-    userId
-      ? supabase.from('tasks').select('id, status').eq('assignee_id', userId)
-      : Promise.resolve({ data: [] }),
-    supabase.from('announcements').select('*').order('created_at', { ascending: false }).limit(3),
-    supabase
-      .from('profiles')
-      .select('id, full_name, credits, rank_tier, is_manager_tag, departments(name)')
-      .eq('is_active', true)
-      .order('credits', { ascending: false })
-      .limit(5),
-    supabase.from('case_studies').select('id, tag_code, department_tag, title, reward_credits').limit(4),
-  ])
-
-  const progress =
-    !progressRes.error && progressRes.data !== null ? Number(progressRes.data) : 0
-
-  const myTasks = (tasksRes.data ?? []) as { id: string; status: string }[]
-  const pendingTasks = myTasks.filter((t) => t.status !== 'done').length
-  const doneTasks = myTasks.filter((t) => t.status === 'done').length
-
-  return {
-    progress,
-    pendingTasks,
-    doneTasks,
-    totalMyTasks: myTasks.length,
-    announcements: (announcementsRes.data ?? []) as Announcement[],
-    topUsers: (topUsersRes.data ?? []) as unknown as LeaderboardEntry[],
-    cases: (casesRes.data ?? []) as CasePreview[],
-  }
-}
+const DEPARTMENTS_CARDS = [
+  {
+    key: 'production',
+    title: '1. Phòng Sản Xuất (Production)',
+    desc: 'Nhật ký 118 lần dừng máy & tổn thất tốc độ 2.396 phút',
+    cta: 'Hồ sơ Sản xuất →',
+  },
+  {
+    key: 'qc',
+    title: '2. Phòng Chất Lượng (QA/QC)',
+    desc: 'Phân bổ 56 mẫu lỗi & nhật ký hiệu chuẩn thiết bị đo',
+    cta: 'Hồ sơ QA/QC →',
+  },
+  {
+    key: 'ehs',
+    title: '3. Phòng An Toàn & Môi Trường (EHS)',
+    desc: 'Chi tiết 6 vụ Near-Miss Line 3 & tải lượng xử lý môi trường',
+    cta: 'Hồ sơ EHS →',
+  },
+  {
+    key: 'hr',
+    title: '4. Phòng Nhân Sự (HR)',
+    desc: 'Định biên ca kíp, tỷ lệ nghỉ việc & tay nghề vận hành',
+    cta: 'Hồ sơ HR →',
+  },
+  {
+    key: 'finance',
+    title: '5. Phòng Tài Chính (Finance)',
+    desc: 'Cấu trúc chi phí vận hành, ngân sách CAPEX & biên lợi nhuận',
+    cta: 'Hồ sơ Tài chính →',
+  },
+  {
+    key: 'rnd',
+    title: '6. Phòng Nghiên Cứu (R&D)',
+    desc: 'Thông số vật liệu, thiết kế khuôn & giới hạn kỹ thuật Line 3',
+    cta: 'Hồ sơ R&D →',
+  },
+]
 
 export function Home() {
   const { profile } = useAuth()
-  const isAdmin = profile?.role === 'admin'
+  const navigate = useNavigate()
+  const [selectedStation, setSelectedStation] = useState<StationId | null>(null)
 
-  const extProfile = profile as
-    | (typeof profile & { rank_tier?: string | null; is_manager_tag?: boolean | null })
-    | null
-  const myRank = extProfile?.rank_tier ? RANK_META[extProfile.rank_tier] : null
-  const isManager = Boolean(extProfile?.is_manager_tag)
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['home-dashboard', profile?.id],
-    queryFn: () => fetchDashboardOverview(profile?.id),
-    enabled: Boolean(profile?.id),
-  })
+  const activeStation = STATIONS.find((s) => s.id === selectedStation) ?? null
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      {/* 1. HERO BANNER: ĐỊNH DANH NHÂN SỰ & ĐIỀU HƯỚNG NHANH */}
-      <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white shadow-sm sm:p-7">
-        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
-          <div className="space-y-2.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-teal-500/20 px-3 py-0.5 text-xs font-semibold text-teal-300 ring-1 ring-teal-400/30">
-                <span className="size-1.5 rounded-full bg-teal-400" />
-                Aurora Precision Operations Portal
-              </span>
-              {isManager && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-orange-500 px-2.5 py-0.5 text-xs font-bold text-white">
-                  <Crown size={12} aria-hidden="true" />
-                  MANAGER
-                </span>
-              )}
-              {myRank && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-bold text-amber-300 ring-1 ring-amber-400/40">
-                  <Shield size={12} aria-hidden="true" />
-                  Super Star · {myRank.label}
-                </span>
-              )}
-            </div>
-
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              Xin chào, {profile?.full_name || (isAdmin ? 'Quản trị viên' : 'Cán bộ nhân viên')}
-            </h1>
-
-            <p className="text-sm text-slate-300">
-              Mã nhân viên:{' '}
-              <span className="font-mono font-semibold text-white">
-                {profile?.employee_code || 'ADMIN-0001'}
-              </span>{' '}
-              • Phòng ban:{' '}
-              <span className="font-semibold text-white">
-                {profile?.departments?.name || (isAdmin ? 'Ban Quản Trị Hệ Thống' : 'Chưa phân phòng')}
-              </span>
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2.5">
-            <Link
-              to="/board"
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-teal-500 px-4 text-sm font-bold text-slate-950 transition hover:bg-teal-400"
-            >
-              <ClipboardList size={17} aria-hidden="true" />
-              Bảng Công Việc & Dự Án
-            </Link>
-            <Link
-              to="/games"
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-white/10 px-4 text-sm font-semibold text-white ring-1 ring-white/15 transition hover:bg-white/20"
-            >
-              <Gamepad2 size={17} aria-hidden="true" />
-              Giả lập Nghiệp vụ
-            </Link>
-            <Link
-              to="/shop"
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-amber-400/15 px-4 text-sm font-semibold text-amber-300 ring-1 ring-amber-400/30 transition hover:bg-amber-400/25"
-            >
-              <ShoppingBag size={17} aria-hidden="true" />
-              Đổi Đặc Quyền
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* 2. BỐN THẺ CHỈ SỐ HOẠT ĐỘNG (LIVE KPI CARDS) */}
-      <section aria-label="Chỉ số hoạt động" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <span>Tiến độ Nhà máy</span>
-            <CheckCircle2 size={16} className="text-teal-600" aria-hidden="true" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">{data?.progress ?? 0}%</span>
-            <span className="text-xs text-slate-500">mục tiêu vận hành</span>
-          </div>
-          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-teal-600 transition-all"
-              style={{ width: `${Math.min(100, data?.progress ?? 0)}%` }}
-            />
-          </div>
-        </div>
-
-        <Link
-          to="/board"
-          className="group rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition hover:border-slate-400"
-        >
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <span>Công việc của tôi</span>
-            <ClipboardList size={16} className="text-blue-600" aria-hidden="true" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">
-              {isLoading ? '—' : data?.pendingTasks ?? 0}
+    <div className="mx-auto max-w-6xl space-y-6 pb-8">
+      {/* 1. HERO BANNER TỐI MÀU (OKWAY PRECISION) */}
+      <section className="flex flex-col justify-between gap-5 rounded-2xl bg-slate-900 p-6 text-white shadow-sm sm:p-7 lg:flex-row lg:items-center">
+        <div className="space-y-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="inline-flex items-center rounded-full bg-teal-950 px-3.5 py-1 text-[11px] font-extrabold tracking-wider text-teal-300 ring-1 ring-teal-500/30">
+              OKWAY PRECISION
             </span>
-            <span className="text-xs text-slate-500">
-              việc cần làm ({data?.doneTasks ?? 0} đã xong)
-            </span>
+            {profile?.full_name && (
+              <span className="text-xs text-slate-400">
+                Xin chào, <b className="text-slate-200">{profile.full_name}</b>
+                {profile.departments?.name ? ` · Phòng ${profile.departments.name}` : ''}
+              </span>
+            )}
           </div>
-          <div className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 group-hover:underline">
-            Mở bảng Kanban <ArrowRight size={13} />
-          </div>
-        </Link>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-[26px]">
+            Mở Rộng Dây Chuyền 3 (Line 3 Expansion)
+          </h1>
+          <p className="text-sm text-slate-300">
+            Mục tiêu: <b className="text-white">~10.000 → 40.000 sp/tháng</b> · OEE hiện tại{' '}
+            <b className="text-amber-300">~48%</b> (12.480 phút / 26 ca)
+          </p>
+        </div>
 
         <Link
           to="/projects"
-          className="group rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition hover:border-slate-400"
+          className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-500 px-6 text-sm font-extrabold text-slate-950 shadow-xs transition hover:bg-teal-400"
         >
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <span>Case Study Phòng ban</span>
-            <BookOpen size={16} className="text-purple-600" aria-hidden="true" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">
-              {isLoading ? '—' : data?.cases.length ?? 0}
-            </span>
-            <span className="text-xs text-slate-500">tình huống đang mở</span>
-          </div>
-          <div className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-purple-600 group-hover:underline">
-            Giải Case nhận thưởng <ArrowRight size={13} />
-          </div>
-        </Link>
-
-        <Link
-          to="/shop"
-          className="group rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition hover:border-amber-400"
-        >
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500">
-            <span>Quỹ Aurora Credits</span>
-            <Sparkles size={16} className="text-amber-500" aria-hidden="true" />
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-amber-700">{profile?.credits ?? 0}</span>
-            <span className="text-xs font-medium text-slate-500">Credits khả dụng</span>
-          </div>
-          <div className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-amber-700 group-hover:underline">
-            Nâng bậc Rank & Đặc quyền <ArrowRight size={13} />
-          </div>
+          Phân tích chi tiết <ArrowRight size={16} />
         </Link>
       </section>
 
-      {/* 3. KHU VỰC CHÍNH: BẢNG TIN BTC + ONBOARDING (TRÁI) & BẢNG XẾP HẠNG + CASE STUDY (PHẢI) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* CỘT TRÁI (7 CỘT): BẢNG TIN BAN TỔ CHỨC & LỘ TRÌNH VẬN HÀNH */}
-        <div className="space-y-6 lg:col-span-7">
-          {/* Bảng tin từ Ban Tổ Chức */}
-          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Megaphone size={18} className="text-orange-600" aria-hidden="true" />
-                <h2 className="text-base font-bold text-slate-900">Thông báo & Chỉ đạo Điều hành</h2>
+      {/* 2. 4 THẺ KPI NỀN TẢNG */}
+      <section aria-label="Chỉ số nền tảng Line 3" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+            <span>SẢN LƯỢNG & MỤC TIÊU</span>
+            <Target size={15} className="text-teal-600" />
+          </div>
+          <div className="mt-2.5 text-3xl font-extrabold tracking-tight text-slate-900">~10.000 sp</div>
+          <div className="mt-2 text-xs font-bold text-teal-600">Mục tiêu mở rộng: 40.000 sp/tháng</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+            <span>HIỆU SUẤT OEE HIỆN TẠI</span>
+            <Activity size={15} className="text-amber-500" />
+          </div>
+          <div className="mt-2.5 text-3xl font-extrabold tracking-tight text-amber-600">~48.0%</div>
+          <div className="mt-2 text-xs font-medium text-slate-500">Trên tổng 12.480 phút (26 ca)</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+            <span>TỔN THẤT DỪNG & TỐC ĐỘ</span>
+            <Clock size={15} className="text-rose-600" />
+          </div>
+          <div className="mt-2.5 text-3xl font-extrabold tracking-tight text-rose-600">6.456 phút</div>
+          <div className="mt-2 text-xs font-medium text-slate-500">118 lần dừng (4.060p) + chậm (2.396p)</div>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+          <div className="flex items-center justify-between text-[11px] font-extrabold uppercase tracking-wide text-slate-500">
+            <span>CHẤT LƯỢNG & AN TOÀN</span>
+            <ShieldAlert size={15} className="text-rose-600" />
+          </div>
+          <div className="mt-2.5 text-3xl font-extrabold tracking-tight text-rose-600">56 mẫu lỗi</div>
+          <div className="mt-2 text-xs font-bold text-rose-600">Ghi nhận 6 vụ Near-Miss Line 3</div>
+        </div>
+      </section>
+
+      {/* 3. THANH LỘ TRÌNH ĐIỀU PHỐI WAR-GAME (150 PHÚT) */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-slate-900">Lộ Trình Điều Phối War-Game (150 Phút)</h2>
+          <span className="text-xs font-medium text-slate-500">4 giai đoạn phân tích & phản biện</span>
+        </div>
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-12">
+          <div className="rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-bold text-white lg:col-span-3">
+            0–20p: Đọc Dữ Liệu Tổng Quan
+          </div>
+          <div className="rounded-lg bg-teal-600 px-3.5 py-2 text-xs font-bold text-white lg:col-span-3">
+            20–75p: Thảo luận
+          </div>
+          <div className="rounded-lg bg-amber-500 px-3.5 py-2 text-xs font-extrabold text-slate-950 lg:col-span-4">
+            75–120p: Lập Phương Án Tối Ưu
+          </div>
+          <div className="rounded-lg bg-slate-200 px-3.5 py-2 text-xs font-bold text-slate-700 lg:col-span-2">
+            120–150p: Phản Biện Hội Đồng
+          </div>
+        </div>
+      </section>
+
+      {/* 4. SƠ ĐỒ 4 TRẠM LINE 3 */}
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Layers size={18} className="text-slate-700" />
+            <h2 className="text-base font-bold text-slate-900">Sơ Đồ 4 Trạm Line 3</h2>
+          </div>
+          <span className="text-xs text-slate-500">Bấm vào từng trạm để xem nhật ký sự cố thô</span>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {STATIONS.map((st) => {
+            const isSelected = selectedStation === st.id
+            const cardStyle =
+              st.tone === 'warning'
+                ? 'border-amber-400 bg-amber-50/60 hover:border-amber-500'
+                : st.tone === 'danger'
+                ? 'border-rose-400 bg-rose-50/60 hover:border-rose-500'
+                : 'border-slate-200 bg-slate-50/70 hover:border-slate-400'
+
+            const codeColor =
+              st.tone === 'warning'
+                ? 'text-amber-700'
+                : st.tone === 'danger'
+                ? 'text-rose-600'
+                : 'text-teal-700'
+
+            const metricColor =
+              st.tone === 'warning'
+                ? 'text-amber-800 font-bold'
+                : st.tone === 'danger'
+                ? 'text-rose-600 font-bold'
+                : 'text-slate-600'
+
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setSelectedStation(isSelected ? null : st.id)}
+                className={`flex flex-col justify-between rounded-xl border-2 p-4 text-left transition ${cardStyle} ${
+                  isSelected ? 'ring-2 ring-slate-900' : ''
+                }`}
+              >
+                <div>
+                  <div className={`text-[11px] font-extrabold uppercase tracking-wide ${codeColor}`}>
+                    {st.code}
+                  </div>
+                  <div className="mt-1.5 text-base font-bold text-slate-900">{st.name}</div>
+                  <div className={`mt-2.5 text-xs ${metricColor}`}>{st.stops}</div>
+                </div>
+                <div className={`mt-3 text-xs font-semibold ${codeColor}`}>
+                  {isSelected ? 'Đang mở nhật ký bên dưới ↑' : st.note}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Ngăn kéo hiển thị Nhật ký thô khi bấm vào trạm */}
+        {activeStation && (
+          <div className="rounded-xl border border-slate-300 bg-slate-900 p-4 text-white space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase text-teal-300">
+                <AlertTriangle size={14} />
+                Nhật ký hiện trường thô — {activeStation.code} ({activeStation.name})
               </div>
-              <Link to="/notifications" className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline">
-                Xem tất cả
-              </Link>
+              <button
+                type="button"
+                onClick={() => navigate('/projects')}
+                className="rounded-lg bg-teal-500 px-3 py-1 text-xs font-extrabold text-slate-950 hover:bg-teal-400"
+              >
+                Đưa sang Bàn Phân Tích →
+              </button>
             </div>
+            <ul className="list-disc space-y-1 pl-5 text-xs text-slate-200">
+              {activeStation.rawLogs.map((log, idx) => (
+                <li key={idx}>{log}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
-            {data?.announcements && data.announcements.length > 0 ? (
-              <ul className="mt-4 space-y-3">
-                {data.announcements.map((item) => (
-                  <li key={item.id} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
-                      <span className="shrink-0 text-[11px] text-slate-500">
-                        {new Date(item.created_at).toLocaleTimeString('vi-VN', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                    {(item.body || item.content) && (
-                      <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-700">
-                        {item.body || item.content}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/60 p-4 text-sm text-slate-600">
-                Hệ thống đang vận hành ổn định. Các thông báo khẩn cấp và tín hiệu chuyển chặng từ Ban Điều Phối sẽ hiển thị trực tiếp tại đây.
-              </div>
-            )}
-          </section>
+      {/* 5. HỒ SƠ DỮ LIỆU 6 PHÒNG BAN */}
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-bold text-slate-900">Hồ Sơ Dữ Liệu 6 Phòng Ban</h2>
+          <span className="text-xs text-slate-500">Bấm để mở hồ sơ chi tiết trong Trung tâm Dự án</span>
+        </div>
 
-          {/* Lộ trình 4 bước tác nghiệp chuẩn */}
-          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-            <div className="flex items-center justify-between">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {DEPARTMENTS_CARDS.map((dept) => (
+            <Link
+              key={dept.key}
+              to={`/projects?dept=${dept.key}`}
+              className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition hover:border-teal-600 hover:shadow-sm"
+            >
               <div>
-                <h2 className="text-base font-bold text-slate-900">Quy trình Tác nghiệp Chuẩn (4 Bước)</h2>
-                <p className="mt-0.5 text-xs text-slate-500">
-                  Lộ trình phối hợp liên phòng ban và tích lũy điểm thưởng trên Aurora OS
-                </p>
+                <h3 className="text-base font-bold text-slate-900 group-hover:text-teal-700">
+                  {dept.title}
+                </h3>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{dept.desc}</p>
               </div>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                Sẵn sàng
-              </span>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <Link
-                to="/documents"
-                className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition hover:border-slate-900 hover:bg-white"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold uppercase text-teal-700">Bước 01</span>
-                  <FileText size={16} className="text-slate-400" />
-                </div>
-                <h3 className="mt-1.5 text-sm font-bold text-slate-900">Tra cứu Dữ liệu Phòng ban</h3>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Đọc tài liệu nội bộ, báo cáo thông số và quy trình chuẩn của 6 phòng ban.
-                </p>
-              </Link>
-
-              <Link
-                to="/projects"
-                className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition hover:border-slate-900 hover:bg-white"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold uppercase text-teal-700">Bước 02</span>
-                  <BookOpen size={16} className="text-slate-400" />
-                </div>
-                <h3 className="mt-1.5 text-sm font-bold text-slate-900">Giải Case Study & Kanban</h3>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Phân tích tình huống thực tế của phòng ban và nộp phương án xử lý nhận thưởng.
-                </p>
-              </Link>
-
-              <Link
-                to="/games"
-                className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition hover:border-slate-900 hover:bg-white"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold uppercase text-teal-700">Bước 03</span>
-                  <Gamepad2 size={16} className="text-slate-400" />
-                </div>
-                <h3 className="mt-1.5 text-sm font-bold text-slate-900">Giả lập Ca làm việc (60s)</h3>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Thử thách phản xạ nghiệp vụ đúng chuyên môn để tăng tiến độ nhà máy & Credits.
-                </p>
-              </Link>
-
-              <Link
-                to="/chat"
-                className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 transition hover:border-slate-900 hover:bg-white"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold uppercase text-teal-700">Bước 04</span>
-                  <MessageSquare size={16} className="text-slate-400" />
-                </div>
-                <h3 className="mt-1.5 text-sm font-bold text-slate-900">Thương lượng & Copilot</h3>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Trao đổi trực tiếp qua kênh Chat liên phòng hoặc hỏi trợ lý Aurora Copilot.
-                </p>
-              </Link>
-            </div>
-          </section>
+              <div className="mt-4 text-xs font-extrabold text-teal-600 group-hover:translate-x-0.5 transition-transform">
+                {dept.cta}
+              </div>
+            </Link>
+          ))}
         </div>
-
-        {/* CỘT PHẢI (5 CỘT): BẢNG XẾP HẠNG VINH DANH & CASE STUDY NỔI BẬT */}
-        <div className="space-y-6 lg:col-span-5">
-          {/* Top 5 Bảng xếp hạng Credits */}
-          <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <Trophy size={18} className="text-amber-500" aria-hidden="true" />
-                <h2 className="text-base font-bold text-slate-900">Bảng Vinh Danh Dẫn Đầu</h2>
-              </div>
-              <Link to="/leaderboard" className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline">
-                Chi tiết
-              </Link>
-            </div>
-
-            {data?.topUsers && data.topUsers.length > 0 ? (
-              <ul className="mt-4 space-y-2.5">
-                {data.topUsers.map((u, idx) => {
-                  const r = u.rank_tier ? RANK_META[u.rank_tier] : null
-                  return (
-                    <li
-                      key={u.id}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50/70 px-3 py-2.5"
-                    >
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span
-                          className={`grid size-6 shrink-0 place-items-center rounded-full text-xs font-black ${
-                            idx === 0
-                              ? 'bg-amber-400 text-slate-950'
-                              : idx === 1
-                              ? 'bg-slate-300 text-slate-900'
-                              : idx === 2
-                              ? 'bg-amber-700 text-white'
-                              : 'bg-slate-200 text-slate-700'
-                          }`}
-                        >
-                          {idx + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-bold text-slate-900">
-                            {u.is_manager_tag ? `Manager - ${u.full_name}` : u.full_name}
-                          </div>
-                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-                            <span>{u.departments?.name ?? 'Thành viên'}</span>
-                            {r && (
-                              <span className={`rounded border px-1.5 py-0.2 font-semibold ${r.badge}`}>
-                                {r.label}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-extrabold text-amber-900">
-                        {u.credits ?? 0} Cr
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            ) : (
-              <p className="mt-4 text-xs text-slate-500">Đang cập nhật dữ liệu xếp hạng…</p>
-            )}
-          </section>
-
-          {/* Truy cập nhanh Hỗ trợ & Trợ lý AI */}
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-xs">
-            <div className="flex items-start gap-3">
-              <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-slate-900 text-white">
-                <HelpCircle size={20} aria-hidden="true" />
-              </div>
-              <div className="flex-1">
-                <h2 className="text-sm font-bold text-slate-900">Cần hỗ trợ kỹ thuật hoặc giải đáp?</h2>
-                <p className="mt-1 text-xs leading-relaxed text-slate-600">
-                  Sử dụng trợ lý <b>Aurora Copilot</b> hoặc gửi phiếu hỗ trợ trực tiếp tới Ban Điều Phối.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Link
-                    to="/incidents"
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 text-xs font-semibold text-white hover:bg-slate-800"
-                  >
-                    <Award size={14} />
-                    Mở Trung tâm Hỗ trợ
-                  </Link>
-                  <Link
-                    to="/chat"
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                  >
-                    Vào Kênh Chat
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
+      </section>
     </div>
   )
 }
 
-// Trang giữ chỗ cho các tính năng sẽ làm ở giai đoạn sau
+// Trang giữ chỗ cho các tính năng mở rộng
 export function Placeholder({ title }: { title: string }) {
   return (
     <div className="mx-auto max-w-3xl p-6">

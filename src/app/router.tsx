@@ -17,6 +17,7 @@ import ReportsPage from '../features/Support/ReportsPage'
 import NotificationsPage from '../features/notifications/NotificationsPage'
 import { ShopPage } from '../features/shop/ShopPage'
 import { QuizPage } from '../features/quiz/QuizPage'
+import { Line3ProjectPage } from '../features/projects/Line3ProjectPage'
 
 const PAGES: [string, string][] = [
   ['quests', 'Nhiệm vụ'],
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
 
           { path: 'reports', element: <ReportsPage /> },
           { path: 'notifications', element: <NotificationsPage /> },
+          { path: 'projects', element: <Line3ProjectPage /> },
 
           ...PAGES.map(([p, t]) => ({ path: p, element: <Placeholder title={t} /> })),
           {
