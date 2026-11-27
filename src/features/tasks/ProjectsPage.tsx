@@ -4,15 +4,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookOpen, Download, ExternalLink, FileText, FolderKanban } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
+import { downloadOriginalDoc, fetchDocuments, signedUrl } from '../documents/api'
 import { canPreview, fmtSize } from '../documents/files'
 import { useMyDepartmentId } from '../documents/hooks'
 import type { Dept } from '../documents/types'
 import { createProject, fetchProjects } from './api'
-import { downloadOriginalDoc, fetchDocuments, signedUrl } from '../documents/api'
+
 type DeptKey = 'production' | 'qc' | 'ehs' | 'hr' | 'finance' | 'rnd'
 
 type DataTableBlock = {
   title: string
+  subtitle?: string
   headers: string[]
   rows: string[][]
 }
@@ -24,6 +26,7 @@ type DeptBrief = {
   matchKeywords: string[]
   mission: string
   metrics: { label: string; value: string }[]
+  notes?: string[]
   tables: DataTableBlock[]
   deliverables: string[]
 }
@@ -32,7 +35,7 @@ const DEPT_BRIEFS: Record<DeptKey, DeptBrief> = {
   production: {
     key: 'production',
     tabLabel: 'Sản xuất',
-    title: '1. Đề Bài Phòng Sản Xuất (Production)',
+    title: '1. Hồ Sơ Chuyên Môn — Phòng Sản Xuất (Production)',
     matchKeywords: ['sản xuất', 'production'],
     mission:
       'Đánh giá năng lực vận hành hiện tại của Dây chuyền 3 và đề xuất kế hoạch nâng sản lượng từ ~10.000 lên 40.000 sản phẩm/tháng trong 90 ngày.',
@@ -67,14 +70,14 @@ const DEPT_BRIEFS: Record<DeptKey, DeptBrief> = {
       },
     ],
     deliverables: [
-      'Xác định các nguyên nhân làm giảm OEE trên Line 3.',
-      'Đề xuất lộ trình nâng công suất lên 40.000 sp/tháng theo từng chặng 30 – 60 – 90 ngày.',
+      'Xác định các nguyên nhân làm giảm OEE trên Line 3 và lập A3 trọng tâm.',
+      'Đề xuất lộ trình nâng công suất lên 40.000 sp/tháng theo các mốc M01 – M02 – M03.',
     ],
   },
   qc: {
     key: 'qc',
     tabLabel: 'QA/QC',
-    title: '2. Đề Bài Phòng Chất Lượng (QA/QC)',
+    title: '2. Hồ Sơ Chuyên Môn — Phòng Chất Lượng (QA/QC)',
     matchKeywords: ['chất lượng', 'qc', 'qa'],
     mission:
       'Kiểm soát tỷ lệ lỗi sản phẩm khi tăng tốc độ dây chuyền, đảm bảo ngưỡng lỗi khách hàng dưới 500 ppm (< 0,05%) và không để lọt lỗi ra ngoài.',
@@ -91,143 +94,236 @@ const DEPT_BRIEFS: Record<DeptKey, DeptBrief> = {
         rows: [
           ['Sai lệch kích thước khớp nối', '34 mẫu', '60,7%', 'Vượt dung sai ±0,05 mm sau các lần chuyển đổi mã hàng'],
           ['Rò rỉ vi mô đường hàn', '22 mẫu', '39,3%', 'Không đạt áp suất thử kín tại Trạm ST-03'],
-          ['Hàng làm lại (Rework)', '470 sản phẩm', '100% đạt sau sửa', 'Tốn thêm 18 giờ công kiểm tra & gia công lại'],
+          ['Hàng làm lại (Rework)', '470 sản phẩm', '100% đạt sau sửa', 'Phát sinh thêm giờ công kiểm tra & gia công lại'],
           ['Thiết bị đo độ bền kéo (Lab)', '—', '—', 'Quá hạn hiệu chuẩn định kỳ 40 ngày chưa bảo trì'],
         ],
       },
     ],
     deliverables: [
       'Đề xuất phương án kiểm soát chất lượng trên chuyền (In-line QC) khi tăng sản lượng gấp 4 lần.',
-      'Xây dựng quy trình ngăn ngừa lỗi tái diễn sau mỗi lần chuyển đổi khuôn.',
+      'Xây dựng quy trình ngăn ngừa lỗi tái diễn sau mỗi lần chuyển đổi khuôn và xác nhận QC độc lập.',
     ],
   },
   ehs: {
     key: 'ehs',
     tabLabel: 'An toàn EHS',
-    title: '3. Đề Bài Phòng An Toàn & Môi Trường (EHS)',
+    title: '3. Hồ Sơ Chuyên Môn — Phòng An Toàn & Môi Trường (EHS)',
     matchKeywords: ['an toàn', 'ehs', 'môi trường'],
     mission:
-      'Đảm bảo mục tiêu 0 tai nạn lao động và tuân thủ giới hạn xả thải môi trường khi Line 3 vận hành tăng cường 3 ca liên tục.',
+      'Đánh giá các mối nguy ảnh hưởng đến việc mở rộng vận hành Line 3; chọn một vấn đề trọng tâm để lập A3, xác định biện pháp kiểm soát và điều kiện an toàn phải hoàn tất trước khi triển khai.',
     metrics: [
-      { label: 'Sự cố suýt tai nạn (Near-Miss)', value: '6 vụ trên Line 3' },
-      { label: 'Tải lượng xử lý nước thải', value: '92% công suất thiết kế' },
-      { label: 'Độ ồn tại cụm ST-02', value: '86 dBA (ca cao điểm)' },
-      { label: 'Ngân sách hạng mục B04', value: '140 triệu VNĐ' },
+      { label: 'Ghi nhận chạy thử (D01–D26)', value: '6 sự kiện Near-Miss' },
+      { label: 'Ngân sách tham chiếu B04', value: '140 triệu đồng' },
+      { label: 'Mặt bàn tham chiếu ST-04', value: '900 mm (Khay 1.650 mm)' },
+      { label: 'Nguyên tắc triển khai', value: 'Hoàn tất an toàn trước vận hành' },
+    ],
+    notes: [
+      'Thứ tự ưu tiên và khả năng phân kỳ do kết quả đánh giá rủi ro quyết định, không mặc định hạng mục nào luôn có thể hoãn.',
+      'Các thay đổi đồ gá/cảm biến trong gói Engineering A/B không được tính trùng với chi phí biện pháp an toàn E1–E5.',
     ],
     tables: [
       {
-        title: 'Bảng 3A: Nhật ký chi tiết 6 vụ Near-Miss ghi nhận trên Line 3',
-        headers: ['Mã sự cố', 'Vị trí', 'Ca làm việc', 'Tình huống ghi nhận'],
+        title: 'Bảng 3A: Các ghi nhận EHS trong kỳ chạy thử (Mẫu 26 ca D01–D26)',
+        subtitle: 'Phân loại ban đầu giúp xác định hướng đánh giá; chưa thay thế kết luận điều tra chính thức.',
+        headers: ['Mã / Ca', 'Trạm', 'Phân loại sơ bộ', 'Hiện tượng và trạng thái cần xác minh'],
         rows: [
-          ['NM-L3-01', 'Trạm ST-02', 'Ca 1 (Ngày)', 'Công nhân đưa tay gạt phôi kẹt khi băng tải chưa dừng hẳn'],
-          ['NM-L3-02', 'Trạm ST-03', 'Ca 2 (Đêm)', 'Thao tác lấy mẫu kiểm tra gần cụm cảm biến khi máy đang chạy'],
-          ['NM-L3-03', 'Trạm ST-02', 'Ca 2 (Đêm)', 'Găng tay bảo hộ quá rộng bị vướng nhẹ vào thanh dẫn hướng'],
-          ['NM-L3-04', 'Trạm ST-03', 'Ca 1 (Ngày)', 'Vệ sinh mắt cảm biến quang học khi chưa ngắt nguồn khí nén'],
-          ['NM-L3-05', 'Khu vực ST-01', 'Ca 1 (Ngày)', 'Trượt chân do rò rỉ dầu bôi trơn dưới sàn thao tác'],
-          ['NM-L3-06', 'Tủ điều khiển phụ', 'Ca 2 (Đêm)', 'Mở nắp tủ kiểm tra rơ-le nhưng chưa thực hiện khóa nguồn LOTO'],
+          ['NM-L3-01 · D04', 'ST-02', 'Điều kiện bảo hộ', 'Găng tay cỡ M rộng; chưa có xác nhận đã chọn được kích cỡ phù hợp.'],
+          ['NM-L3-02 · D10', 'ST-02', 'Tình huống nguy hiểm khi xử lý kẹt', 'Người thao tác tiếp cận vùng có nguy cơ kẹp; đã dừng để xử lý mối nguy. Cần xác minh mức độ suýt gây tai nạn và biện pháp kiểm soát sau dừng.'],
+          ['NM-L3-03 · D13', 'ST-04', 'Điều kiện công thái học', 'Người thao tác phải với lên khay cao; chưa có kết quả đo tầm với thực tế.'],
+          ['NM-L3-04 · D17', 'ST-01', 'Điều kiện bố trí vật tư', 'Xe cấp vật tư nằm ngoài vị trí đánh dấu; chưa có đánh giá tác động đến lối đi.'],
+          ['NM-L3-05 · D22', 'ST-03', 'Điều kiện che chắn thiết bị', 'Cửa che cụm truyền động không khép kín; chưa có bằng chứng xác nhận đã kiểm tra và nghiệm thu biện pháp khắc phục.'],
+          ['NM-L3-06 · D25', 'ST-02', 'Bảo hộ và thao tác', 'Găng tay làm giảm độ linh hoạt khi lắp gioăng; chưa xác định nguyên nhân và giải pháp phù hợp.'],
+        ],
+      },
+      {
+        title: 'Bảng 3B: Các dữ kiện giúp kiểm tra biện pháp kiểm soát',
+        headers: ['Vị trí / Nguồn', 'Thông tin hiện có', 'Cần xác minh'],
+        rows: [
+          ['ST-02 · D10', 'Có ghi nhận tạm dừng khi phát hiện nguy cơ tiếp cận điểm kẹp trong lúc xử lý kẹt.', 'Quy trình xử lý kẹt, trạng thái cô lập năng lượng, chức năng che chắn và năng lực người được phép can thiệp.'],
+          ['ST-03 · D22', 'Cửa che bộ truyền động không đóng kín; hồ sơ chưa có kết quả nghiệm thu sửa chữa.', 'Tình trạng cơ cấu bảo vệ và quyết định cho phép vận hành; không gắn sự kiện này với dừng tại ST-02 chỉ vì cùng ngày.'],
+          ['ST-04 · D13', 'Thông số bố trí tham chiếu: mặt bàn cao 900 mm, mép trên khay linh kiện cao 1.650 mm so với sàn.', 'Đo tầm với, tư thế thực tế và mức phù hợp với nhiều người sử dụng; chưa được kết luận nguyên nhân.'],
+        ],
+      },
+      {
+        title: 'Bảng 3C: Dự toán EHS và các lựa chọn phân kỳ (Gói tham chiếu B04 — 140 triệu đồng)',
+        subtitle: 'Cơ cấu dự toán bổ sung cho hoạt động mô phỏng; không cộng thêm 140 triệu vào tổng ngân sách chung.',
+        headers: ['Hạng mục dự toán', 'Chi phí (Triệu đồng)', 'Nội dung dự kiến / Điều kiện đánh giá'],
+        rows: [
+          ['E1. Kiểm soát điểm kẹp và che chắn máy', '55', 'Khảo sát, cải tạo bảo vệ tại khu vực có nguy cơ; xác nhận hiệu lực trước khi cho vận hành tương ứng.'],
+          ['E2. Phương tiện xử lý kẹt an toàn', '25', 'Dụng cụ hỗ trợ và điều kiện kiểm soát năng lượng khi can thiệp; phối hợp Engineering/Sản xuất.'],
+          ['E3. Cải thiện bố trí và tầm với', '30', 'Điều chỉnh vị trí khay/trạm sau khảo sát công thái học; có thể xem xét thực hiện theo giai đoạn nếu kiểm soát tạm thời đủ an toàn.'],
+          ['E4. Trang bị bảo hộ phù hợp', '20', 'Khảo sát kích cỡ, thử tính phù hợp thao tác và cấp trang bị cho các vị trí liên quan.'],
+          ['E5. Đánh giá, xác nhận kiểm soát an toàn', '10', 'Đánh giá hiện trường, rà soát hướng dẫn xử lý sự cố và xác nhận năng lực theo nhiệm vụ; không trùng đào tạo ca 2 trong ngân sách Nhân sự.'],
+          ['TỔNG CỘNG', '140', 'Chi phí mô phỏng trong gói B04; không cộng thêm 140 triệu vào tổng ngân sách chung.'],
+        ],
+      },
+      {
+        title: 'Bảng 3D: Thông tin EHS cần phối hợp xác nhận liên phòng',
+        headers: ['Phòng', 'Thông tin EHS cần nhận hoặc xác nhận'],
+        rows: [
+          ['Sản xuất', 'Cách xử lý kẹt, trạng thái máy khi can thiệp, lối đi/vị trí vật tư và kế hoạch mở rộng ca.'],
+          ['Engineering', 'Cấu tạo che chắn, cơ chế bảo vệ, thông số trạm ST-04 và tính khả thi của điều chỉnh thiết bị.'],
+          ['Nhân sự / QA/QC', 'Năng lực xử lý sự cố, mức phù hợp PPE; tác động của thay đổi thao tác đến kiểm soát chất lượng.'],
+          ['Tài chính', 'Giá dự toán, giới hạn ngân sách, hạng mục có thể phân kỳ nếu được EHS xác nhận đủ kiểm soát.'],
         ],
       },
     ],
     deliverables: [
-      'Đề xuất giải pháp kỹ thuật và quy trình loại bỏ nguy cơ tai nạn tại ST-02 và ST-03.',
-      'Phương án kiểm soát tải lượng nước thải và tiếng ồn trong giới hạn ngân sách.',
+      'Trước M01: Nêu vấn đề ưu tiên, bằng chứng ban đầu và ít nhất một điểm đã đối chiếu với phòng khác.',
+      'Trước M02: Hoàn thiện A3 (giả thuyết nguyên nhân, phương án kiểm soát, kiểm chứng hiệu lực, chi phí và điều kiện phối hợp).',
+      'Trước M03: Đề xuất hạng mục cần hoàn tất trước vận hành, phương án phân kỳ ngân sách và trách nhiệm xác nhận.',
     ],
   },
   hr: {
     key: 'hr',
     tabLabel: 'Nhân sự HR',
-    title: '4. Đề Bài Phòng Nhân Sự (HR)',
+    title: '4. Hồ Sơ Chuyên Môn — Phòng Nhân Sự (HR)',
     matchKeywords: ['nhân sự', 'hr'],
     mission:
-      'Hoạch định định biên nhân sự, lịch chia ca và chương trình đào tạo đa kỹ năng để vận hành ổn định sản lượng 40.000 sp/tháng.',
+      'Đề xuất phương án chuẩn bị nhân lực cho việc mở rộng Line 3: đủ số người, đúng năng lực theo vị trí, đáp ứng thời điểm vận hành và điều kiện tham gia thực tế.',
     metrics: [
-      { label: 'Định biên hiện tại', value: '18 người / ca' },
-      { label: 'Tỷ lệ nghỉ việc (< 6 tháng)', value: '22% / năm' },
-      { label: 'Nhân sự biết đổi khuôn', value: '35% tổng quân số' },
-      { label: 'Tỷ lệ tăng ca (OT)', value: '+28% so với quý trước' },
+      { label: 'Ca 1 hiện hữu', value: 'Định biên 30 CN (16–19 độc lập)' },
+      { label: 'Ca 2 cần bổ sung', value: '32 CN & 5 QC' },
+      { label: 'Dự báo ngày 56', value: '29 CN & 4 QC (Thiếu 3 CN + 1 QC)' },
+      { label: 'Khung giờ đào tạo / Ca 2', value: '17:00–21:00 / Hết ca 22:00' },
+    ],
+    notes: [
+      'Đối chiếu số lượng: 4 vị trí công nhân ban đầu bị ảnh hưởng − 1 vị trí có người thay thế = 3 công nhân còn thiếu; cùng 1 vị trí QC chưa đạt → đúng mức thiếu 3 + 1.',
+      'Tách rõ 3 vấn đề khi rà soát: (1) năng lực thực hiện công việc; (2) cơ hội tiếp cận đào tạo/đánh giá; (3) khả năng tham gia lịch ca được xác minh với chính người liên quan. Không suy luận từ giới tính hay tình trạng gia đình.',
     ],
     tables: [
       {
-        title: 'Bảng 4A: Hồ sơ nhân sự & năng lực vận hành mẫu trên Line 3 (NS-01 – NS-05)',
-        headers: ['Mã hồ sơ', 'Vị trí / Nhóm', 'Thâm niên', 'Chứng chỉ kỹ năng', 'Ghi nhận vận hành'],
+        title: 'Bảng 4A: Nhu cầu và mức độ sẵn sàng nhân lực theo phạm vi ca',
+        headers: ['Phạm vi', 'Thông tin đã được cung cấp'],
         rows: [
-          ['NS-01', 'Kỹ thuật viên trưởng ca', '4,5 năm', 'Bậc 4/4 (Đổi khuôn & Bảo trì)', 'Chỉ có 3 người toàn xưởng, phải trực chéo cả ca đêm'],
-          ['NS-02', 'Tổ trưởng dây chuyền', '3,0 năm', 'Bậc 3/4 (Vận hành tổng hợp)', 'Thạo vận hành nhưng chưa được cấp quyền chỉnh thông số khuôn'],
-          ['NS-03', 'Vận hành viên Trạm ST-02', '1,5 năm', 'Bậc 2/4 (Vận hành cơ bản)', 'Đứng máy ổn định, chưa biết quy trình tháo lắp khuôn nhanh'],
-          ['NS-04', 'Vận hành viên ca đêm', '4 tháng', 'Bậc 1/4 (Đào tạo tại chỗ)', 'Thường xuyên tăng ca > 10h/ngày, tỷ lệ sai thao tác cao'],
-          ['NS-05', 'Nhân sự mới tuyển', '1,5 tháng', 'Chưa hoàn thành sát hạch', 'Chưa được thực hành xử lý kẹt phôi an toàn trên Line 3'],
+          ['Ca 1 hiện hữu', 'Định biên tham chiếu 30 công nhân. Trong ngày vận hành thông thường, 16–19 người được ghi nhận làm việc độc lập; mức độ bao phủ kỹ năng theo trạm chưa rõ. Số QC ca 1 chưa xác nhận.'],
+          ['Ca 2 cần bổ sung', 'Nhu cầu: 32 công nhân và 5 nhân viên kiểm tra chất lượng (QC).'],
+          ['Dự báo ngày 56', 'Dự kiến có 29 công nhân và 4 QC đủ chuẩn → thiếu 3 công nhân và 1 QC.'],
+          ['Ca ngoài lịch chuẩn', 'Chưa có kíp, danh sách người và lịch phân công được xác nhận; không mặc định có thể sử dụng nhân lực ca 2 cho các ca này.'],
+        ],
+      },
+      {
+        title: 'Bảng 4B: Năm hồ sơ nhân sự cần rà soát (NS-01 – NS-05)',
+        subtitle: 'Tình trạng dưới đây là dữ liệu mô phỏng bổ sung, chưa phải kết luận về nguyên nhân.',
+        headers: ['Mã / Vị trí', 'Trạng thái tại mốc rà soát', 'Thông tin cần xác minh'],
+        rows: [
+          ['NS-01 · CN, ST-01', 'Đã học nội dung cơ bản; chưa hoàn thành đánh giá thao tác độc lập.', 'Lịch đánh giá lại; người hướng dẫn và điều kiện thực hành.'],
+          ['NS-02 · CN, ST-02', 'Chưa hoàn thành buổi thực hành theo lịch 17:00–21:00; lý do tham gia chưa được xác nhận trực tiếp.', 'Thời gian có thể tham gia; phương án đào tạo thay thế.'],
+          ['NS-03 · CN, ST-03', 'Đã dự đánh giá nhưng chưa đạt phần xử lý bất thường tại trạm.', 'Nội dung thiếu, cơ hội bổ sung và thời gian đánh giá lại.'],
+          ['NS-04 · CN, ST-04', 'Ứng viên kế hoạch ban đầu không tiếp tục; đã có người thay thế đạt chuẩn trước ngày 56.', 'Xác nhận hồ sơ người thay thế để tránh tính thiếu trùng.'],
+          ['NS-05 · QC, ST-03', 'Đã hoàn thành nội dung lý thuyết; chưa được xác nhận thực hiện kiểm tra độc lập.', 'Tiêu chuẩn QC, bài đánh giá thực hành và người có thẩm quyền xác nhận.'],
+        ],
+      },
+      {
+        title: 'Bảng 4C: Những thông tin HR cần chủ động trao đổi liên phòng',
+        headers: ['Phòng liên quan', 'Cần hỏi / đối chiếu'],
+        rows: [
+          ['Sản xuất', '32 công nhân được phân bổ theo vị trí/trạm thế nào? Thời điểm cần người? Phương án ca bổ sung yêu cầu bao nhiêu lượt phân công?'],
+          ['Chất lượng (QA/QC)', 'Tiêu chí và thẩm quyền xác nhận QC làm việc độc lập là gì? Vị trí QC còn thiếu cần năng lực cụ thể nào?'],
+          ['Kỹ thuật (Engineering)', 'Các thay đổi máy, đồ gá hoặc phương pháp vận hành có làm phát sinh yêu cầu đào tạo/đánh giá lại không?'],
+          ['EHS', 'Yêu cầu đối với làm việc ca tối, thời gian nghỉ, điều kiện đi lại và các rủi ro của vị trí có được đánh giá chưa?'],
+          ['Tài chính', 'Ngân sách đào tạo và hỗ trợ di chuyển hiện là bao nhiêu? Phần nào chịu tác động khi thay đổi lịch hoặc tăng số ca?'],
         ],
       },
     ],
     deliverables: [
-      'Đề xuất phương án bố trí ca kíp và giảm phụ thuộc vào tăng ca (OT) kéo dài.',
-      'Kế hoạch đào tạo chéo (Cross-training) nâng tỷ lệ nhân sự biết đổi khuôn.',
+      'Trước M01: Một phát hiện có bằng chứng, mức ảnh hưởng và ít nhất một thông tin được yêu cầu xác minh từ phòng khác.',
+      'Trước M02: A3 trình bày hiện trạng, mục tiêu, giả thuyết nguyên nhân, lựa chọn biện pháp, kế hoạch thực hiện và cách kiểm chứng.',
+      'Trước M03: Phương án bù thiếu nhân lực (phân biệt nhân sự sẵn sàng cho ca 2 với ca bổ sung) và kế hoạch ca đã cập nhật; thông tin chưa xác nhận ghi rõ "Cần xác minh".',
     ],
   },
   finance: {
     key: 'finance',
     tabLabel: 'Tài chính',
-    title: '5. Đề Bài Phòng Tài Chính (Finance)',
+    title: '5. Hồ Sơ Chuyên Môn — Phòng Tài Chính (Finance)',
     matchKeywords: ['tài chính', 'kế toán', 'finance'],
     mission:
-      'Phân bổ ngân sách đầu tư (CAPEX) trong trần 1.710 triệu VNĐ và kiểm soát giá thành đơn vị khi mở rộng sản lượng lên 40.000 sp/tháng.',
+      'Thẩm định và đề xuất cách phân bổ nguồn lực cho kế hoạch mở rộng Line 3 trong 90 ngày; cân đối chi phí, tiến độ, hiệu quả dự kiến và các điều kiện về chất lượng, an toàn, lao động.',
     metrics: [
-      { label: 'Trần ngân sách phê duyệt', value: '1.710 triệu VNĐ' },
-      { label: 'Tác động dừng máy lên giá vốn', value: '+14% giá thành đơn vị' },
-      { label: 'Chi phí tăng ca OT hiện tại', value: '185 triệu VNĐ / tháng' },
-      { label: 'Thời hạn hoàn vốn yêu cầu', value: '≤ 12 tháng' },
+      { label: 'Hạn mức 90 ngày', value: '1.710 triệu đồng' },
+      { label: 'Danh mục chọn gói A', value: '1.680 triệu đồng' },
+      { label: 'Danh mục chọn gói B', value: '1.580 triệu đồng' },
+      { label: 'Mô hình B06 (n ≤ 16 ca)', value: '0 (n=0) | 55 + 12,5×n tr' },
+    ],
+    notes: [
+      'A và B là hai lựa chọn thay thế nhau. B07 và B09 không nằm trong giá gói kỹ thuật. B09 chỉ được xem xét hoãn khi Engineering xác nhận rủi ro phù hợp. Khoản B06 chưa chứng minh có đủ kíp vận hành.',
+      'Nguyên tắc: Không cắt bỏ biện pháp an toàn, chất lượng hoặc điều kiện lao động bắt buộc để cân đối ngân sách. Chi phí nằm trong hạn mức chưa đồng nghĩa dự án đủ điều kiện triển khai hay đạt mục tiêu sản lượng.',
     ],
     tables: [
       {
-        title: 'Bảng 5A: Danh mục chi tiết 9 hạng mục đề xuất ngân sách (B01 – B09)',
-        headers: ['Mã', 'Hạng mục đề xuất', 'Chi phí dự kiến', 'Phòng ban đề xuất'],
+        title: 'Bảng 5A: Hạn mức và danh mục chi phí tham chiếu (B01 – B09)',
+        subtitle: 'Các khoản dưới đây là dự toán tham chiếu trước khi phát sinh thay đổi; chưa đồng nghĩa với chi phí đã được phê duyệt.',
+        headers: ['Mã', 'Hạng mục', 'Triệu đồng'],
         rows: [
-          ['B01', 'Bộ gá kẹp nhanh chuyển đổi khuôn (Changeover) ST-02', '260 triệu VNĐ', 'Sản xuất & Kỹ thuật'],
-          ['B02', 'Cải tạo hệ thống tản nhiệt & truyền động cụm ST-02', '220 triệu VNĐ', 'Sản xuất'],
-          ['B03', 'Hệ thống cảm biến quang & camera kiểm lỗi In-line ST-03', '310 triệu VNĐ', 'QA/QC'],
-          ['B04', 'Che chắn an toàn liên động, khóa LOTO & xử lý nước thải', '140 triệu VNĐ', 'An toàn EHS'],
-          ['B05', 'Chương trình đào tạo chéo & sát hạch tay nghề 3 ca', '120 triệu VNĐ', 'Nhân sự HR'],
-          ['B06', 'Chuẩn hóa bộ khuôn & hiệu chỉnh thông số vật liệu mới', '180 triệu VNĐ', 'R&D / Kỹ thuật'],
-          ['B07', 'Gói phụ tùng thay thế chiến lược (Spare parts) 90 ngày', '120 triệu VNĐ', 'Bảo trì & Sản xuất'],
-          ['B08', 'Chi phí chạy thử nghiệm Pilot Run & hiệu chuẩn thiết bị Lab', '160 triệu VNĐ', 'R&D & QA/QC'],
-          ['B09', 'Quỹ dự phòng rủi ro vận hành & biến động đơn hàng', '200 triệu VNĐ', 'Tài chính'],
+          ['B01', 'Gói kỹ thuật A hoặc B', '360 / 260'],
+          ['B02', 'Ổn định vận hành', '245'],
+          ['B03', 'Đo lường, kiểm soát chất lượng', '220'],
+          ['B04', 'An toàn và công thái học', '140'],
+          ['B05', 'Đào tạo và hỗ trợ ca 2', '240'],
+          ['B06', 'Vận hành tối đa 16 ca bổ sung', '255'],
+          ['B07', 'Phụ tùng dự trữ tối thiểu', '80'],
+          ['B08', 'Chạy thử, nghiệm thu thay đổi', '90'],
+          ['B09', 'Dự trữ phụ tùng mở rộng', '50'],
+        ],
+      },
+      {
+        title: 'Bảng 5B: Cấu phần chi phí cần thẩm định chi tiết',
+        subtitle: 'B06 áp dụng cho tối đa 16 ca (8 giờ/ca) ngoài lịch 2 ca/ngày trong tháng thứ ba.',
+        headers: ['Mã / Tổng', 'Cơ cấu dự toán (Triệu đồng)', 'Giới hạn / Điều kiện'],
+        rows: [
+          ['B02 · 245', 'Chuẩn bị đổi mã và bố trí dụng cụ 95; tổ chức cung ứng vật tư tại trạm 80; ghi nhận và theo dõi tổn thất 70.', 'Không bao gồm thay đổi đồ gá B01, phụ tùng B07/B09.'],
+          ['B03 · 220', 'Thiết bị đo và hiệu chuẩn thường kỳ 110; kiểm tra mẫu đầu và theo dõi đặc tính trọng yếu 70; ghi nhận và truy xuất chất lượng 40.', 'Khác với thử nghiệm/nghiệm thu thay đổi tại B08.'],
+          ['B05 · 240', 'Đào tạo và xác nhận năng lực công nhân 135; đào tạo/đánh giá QC 45; hỗ trợ di chuyển ca 2 trong kỳ triển khai 60.', 'Cần kế hoạch nhân sự được xác nhận; không tính hỗ trợ ca bổ sung trong B06.'],
+          ['B06 · 255', 'Chuẩn bị tổ chức ca bổ sung 55 (chỉ khi thực hiện); chi phí theo ca 12,5 × tối đa 16 ca = 200.', 'Tính theo số ca thực tế dự kiến; cần kíp, QC và giờ chạy được chấp thuận.'],
+        ],
+      },
+      {
+        title: 'Bảng 5C: Thông tin cần đề nghị cung cấp từ các phòng ban để thẩm định',
+        headers: ['Đầu mối', 'Thông tin cần đề nghị cung cấp', 'Ý nghĩa thẩm định'],
+        rows: [
+          ['Sản xuất', 'Số giờ chạy cần bổ sung, mức tổn thất và phương án ca.', 'Đánh giá B02, B06 và năng lực dự kiến.'],
+          ['Engineering', 'Phạm vi A/B, thời gian chuẩn bị, kế hoạch thử và điều kiện hoãn B09.', 'Đánh giá mức phù hợp, tiến độ và rủi ro B01.'],
+          ['QA/QC', 'Khối lượng làm lại, sản phẩm loại, yêu cầu kiểm tra và xác nhận sau thay đổi.', 'Kiểm tra nhu cầu B03/B08; không suy ra tiền tiết kiệm khi thiếu đơn giá.'],
+          ['Nhân sự', 'Tiến độ nhân lực ca 2, kíp ca bổ sung, yêu cầu đào tạo và điều kiện tham gia.', 'Xác minh hiệu quả sử dụng B05/B06.'],
+          ['EHS', 'Điều kiện kiểm soát mối nguy và thứ tự triển khai hạng mục an toàn.', 'Xác định phạm vi bắt buộc/có thể phân kỳ B04.'],
         ],
       },
     ],
     deliverables: [
-      'Đánh giá hiệu quả tài chính và thứ tự ưu tiên giải ngân các hạng mục B01–B09 trong trần 1.710 triệu VNĐ.',
-      'Tính toán mức giảm giá thành đơn vị khi OEE đạt mục tiêu.',
+      'Trước M01: Nêu một rủi ro hoặc vấn đề sử dụng ngân sách có bằng chứng; đối chiếu ít nhất một thông tin liên phòng.',
+      'Trước M02: Hoàn thành A3 7 bước về một quyết định tài chính cụ thể; trình bày các phương án cùng điều kiện phê duyệt (ghi "Cần xác minh" nếu thiếu dữ liệu).',
+      'Trước M03: Danh mục ngân sách đề xuất có căn cứ (phương án chọn, thứ tự ưu tiên, khoản hoãn có điều kiện, người xác nhận, tổng chi & phần dư/thiếu).',
     ],
   },
   rnd: {
     key: 'rnd',
     tabLabel: 'R&D / Kỹ thuật',
-    title: '6. Đề Bài Phòng Nghiên Cứu & Kỹ Thuật (R&D)',
-    matchKeywords: ['nghiên cứu', 'kỹ thuật', 'r&d', 'rd'],
+    title: '6. Hồ Sơ Chuyên Môn — Phòng Nghiên Cứu & Kỹ Thuật (R&D / Engineering)',
+    matchKeywords: ['nghiên cứu', 'kỹ thuật', 'r&d', 'rd', 'engineering'],
     mission:
-      'Tối ưu thông số kỹ thuật khuôn mẫu, độ tương thích vật liệu mới và đánh giá 2 gói giải pháp nâng cấp thiết bị trên Line 3.',
+      'Tối ưu thông số kỹ thuật khuôn mẫu, độ tương thích vật liệu mới và đánh giá 2 gói giải pháp nâng cấp thiết bị A/B trên Line 3.',
     metrics: [
       { label: 'Thời gian đổi khuôn chuẩn', value: '78 phút / lần (16 bu-lông)' },
       { label: 'Độ co ngót vật liệu mới', value: 'Lệch 0,15% so với chuẩn cũ' },
-      { label: 'Gói nâng cấp A', value: '360 triệu · 35 ngày triển khai' },
-      { label: 'Gói nâng cấp B', value: '260 triệu · 20 ngày triển khai' },
+      { label: 'Gói kỹ thuật A', value: '360 triệu · 35 ngày triển khai' },
+      { label: 'Gói kỹ thuật B', value: '260 triệu · 20 ngày triển khai' },
     ],
     tables: [
       {
-        title: 'Bảng 6A: So sánh thông số kỹ thuật 2 gói cải tiến thiết bị Trạm ST-02',
+        title: 'Bảng 6A: So sánh thông số kỹ thuật 2 gói cải tiến thiết bị Trạm ST-02 (B01)',
         headers: ['Tiêu chí', 'Gói A (Tự động hóa toàn phần)', 'Gói B (Cơ cấu kẹp nhanh bán tự động)'],
         rows: [
-          ['Chi phí đầu tư', '360 triệu VNĐ', '260 triệu VNĐ'],
+          ['Chi phí đầu tư (B01)', '360 triệu đồng (Chưa gồm B07/B09)', '260 triệu đồng (Chưa gồm B07/B09)'],
           ['Thời gian lắp đặt & dừng máy', '35 ngày', '20 ngày'],
           ['Thời gian đổi khuôn sau cải tiến', '12 phút / lần', '22 phút / lần'],
           ['Yêu cầu trình độ vận hành', 'Cần kỹ sư chuyên trách lập trình', 'Công nhân hiện tại thao tác được sau 2 ngày đào tạo'],
-          ['Khả năng tương thích vật liệu mới', 'Cần nâng cấp thêm bộ điều khiển nhiệt', 'Tương thích trực tiếp với dải nhiệt hiện tại'],
+          ['Điều kiện phụ tùng dự trữ', 'Bắt buộc có gói B07 + B09', 'Có thể xem xét hoãn B09 nếu xác nhận rủi ro phù hợp'],
         ],
       },
     ],
     deliverables: [
-      'Lựa chọn phương án kỹ thuật phù hợp với tiến độ 90 ngày và điều kiện nhân sự hiện tại.',
-      'Đề xuất bộ thông số nhiệt độ – áp suất chuẩn cho lô vật liệu polymer mới.',
+      'Lựa chọn phương án kỹ thuật A hoặc B phù hợp với tiến độ 90 ngày, điều kiện nhân sự và xác nhận điều kiện hoãn B09.',
+      'Phối hợp EHS về cấu tạo che chắn, cơ chế bảo vệ, thông số trạm ST-04 và hiệu chỉnh thông số vật liệu mới.',
     ],
   },
 }
@@ -284,18 +380,18 @@ export function ProjectsPage() {
   }
 
   async function openOriginalFile(storagePath: string, fileName: string | null, inline: boolean) {
-  setFileError('')
-  try {
-    if (inline) {
-      const url = await signedUrl(storagePath)
-      window.open(url, '_blank', 'noopener')
-    } else {
-      await downloadOriginalDoc(storagePath, fileName)
+    setFileError('')
+    try {
+      if (inline) {
+        const url = await signedUrl(storagePath)
+        window.open(url, '_blank', 'noopener')
+      } else {
+        await downloadOriginalDoc(storagePath, fileName)
+      }
+    } catch (e: unknown) {
+      setFileError((e as { message?: string })?.message ?? 'Không tải được tệp gốc.')
     }
-  } catch (e: unknown) {
-    setFileError((e as { message?: string })?.message ?? 'Không tải được tệp gốc.')
   }
-}
 
   const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
   const [name, setName] = useState('')
@@ -439,9 +535,25 @@ export function ProjectsPage() {
               ))}
             </div>
 
+            {brief.notes && brief.notes.length > 0 && (
+              <div className="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-xs leading-relaxed text-slate-800">
+                <div className="font-extrabold uppercase tracking-wide text-amber-900">
+                  Quy tắc & Lưu ý dữ liệu của phòng ban
+                </div>
+                <ul className="list-disc space-y-1 pl-5">
+                  {brief.notes.map((n, idx) => (
+                    <li key={idx}>{n}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {brief.tables.map((tbl) => (
-              <div key={tbl.title} className="space-y-2.5">
-                <h3 className="text-sm font-bold text-slate-900">{tbl.title}</h3>
+              <div key={tbl.title} className="space-y-2">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">{tbl.title}</h3>
+                  {tbl.subtitle && <p className="mt-0.5 text-xs text-slate-500">{tbl.subtitle}</p>}
+                </div>
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                   <table className="w-full text-left text-xs">
                     <thead className="border-b border-slate-200 bg-slate-50 font-bold text-slate-700">
@@ -471,7 +583,7 @@ export function ProjectsPage() {
 
             <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
               <div className="text-xs font-extrabold uppercase tracking-wide text-slate-800">
-                Yêu cầu đầu ra cần trình bày
+                Yêu cầu đầu ra & Các mốc bàn giao (M01 – M03)
               </div>
               <ul className="list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-slate-700">
                 {brief.deliverables.map((d, i) => (
