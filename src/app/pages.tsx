@@ -1,15 +1,25 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
   Clock,
+  Download,
+  ExternalLink,
+  FileText,
+  FolderOpen,
   Layers,
   ShieldAlert,
   Target,
 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
 import { useAuth } from '../features/auth/AuthProvider'
+import { fetchDocuments, signedUrl } from '../features/documents/api'
+import { canPreview, fmtSize } from '../features/documents/files'
+import { useMyDepartmentId } from '../features/documents/hooks'
+import type { Dept, DocRow } from '../features/documents/types'
 
 type StationId = 'ST-01' | 'ST-02' | 'ST-03' | 'ST-04'
 
@@ -78,51 +88,96 @@ const STATIONS: {
 const DEPARTMENTS_CARDS = [
   {
     key: 'production',
+    matchKeywords: ['sản xuất', 'production'],
     title: '1. Phòng Sản Xuất (Production)',
-    desc: 'Nhật ký 118 lần dừng máy & tổn thất tốc độ 2.396 phút',
-    cta: 'Hồ sơ Sản xuất →',
+    desc: 'Hồ sơ vận hành Line 3, nhật ký dừng máy & tổn thất tốc độ',
   },
   {
     key: 'qc',
+    matchKeywords: ['chất lượng', 'qc', 'qa'],
     title: '2. Phòng Chất Lượng (QA/QC)',
-    desc: 'Phân bổ 56 mẫu lỗi & nhật ký hiệu chuẩn thiết bị đo',
-    cta: 'Hồ sơ QA/QC →',
+    desc: 'Hồ sơ kiểm định mẫu lỗi, dung sai & hiệu chuẩn thiết bị đo',
   },
   {
     key: 'ehs',
+    matchKeywords: ['an toàn', 'ehs', 'môi trường'],
     title: '3. Phòng An Toàn & Môi Trường (EHS)',
-    desc: 'Chi tiết 6 vụ Near-Miss Line 3 & tải lượng xử lý môi trường',
-    cta: 'Hồ sơ EHS →',
+    desc: 'Hồ sơ Near-Miss Line 3, an toàn máy & tải lượng môi trường',
   },
   {
     key: 'hr',
+    matchKeywords: ['nhân sự', 'hr'],
     title: '4. Phòng Nhân Sự (HR)',
-    desc: 'Định biên ca kíp, tỷ lệ nghỉ việc & tay nghề vận hành',
-    cta: 'Hồ sơ HR →',
+    desc: 'Hồ sơ định biên ca kíp, chứng chỉ tay nghề & biến động nhân sự',
   },
   {
     key: 'finance',
+    matchKeywords: ['tài chính', 'kế toán', 'finance'],
     title: '5. Phòng Tài Chính (Finance)',
-    desc: 'Cấu trúc chi phí vận hành, ngân sách CAPEX & biên lợi nhuận',
-    cta: 'Hồ sơ Tài chính →',
+    desc: 'Hồ sơ chi phí vận hành, ngân sách CAPEX & định mức giá thành',
   },
   {
     key: 'rnd',
-    title: '6. Phòng Nghiên Cứu (R&D)',
-    desc: 'Thông số vật liệu, thiết kế khuôn & giới hạn kỹ thuật Line 3',
-    cta: 'Hồ sơ R&D →',
+    matchKeywords: ['nghiên cứu', 'kỹ thuật', 'r&d', 'rd'],
+    title: '6. Phòng Nghiên Cứu & Kỹ Thuật (R&D)',
+    desc: 'Hồ sơ thông số vật liệu, thiết kế khuôn & giới hạn kỹ thuật',
   },
 ]
 
 export function Home() {
   const { profile } = useAuth()
   const navigate = useNavigate()
+  const isAdmin = profile?.role === 'admin'
+  const myDeptId = useMyDepartmentId().data ?? null
+
   const [selectedStation, setSelectedStation] = useState<StationId | null>(null)
+  const [fileError, setFileError] = useState('')
+
+  const docsQuery = useQuery({ queryKey: ['documents'], queryFn: fetchDocuments })
+  const { data: depts = [] } = useQuery({
+    queryKey: ['departments'],
+    queryFn: async () =>
+      ((await supabase.from('departments').select('id, name').order('name')).data ?? []) as Dept[],
+  })
+
+  // Lọc danh sách tài liệu hợp lệ theo phân quyền phòng ban
+  const accessibleDocs = useMemo(() => {
+    return (docsQuery.data ?? []).filter((d) => {
+      if (isAdmin || d.uploaded_by === profile?.id) return true
+      if (!d.department_id) return true
+      return myDeptId !== null && d.department_id === myDeptId
+    })
+  }, [docsQuery.data, isAdmin, profile?.id, myDeptId])
+
+  // Tài liệu chung (department_id === null)
+  const sharedDocs = useMemo(
+    () => accessibleDocs.filter((d) => !d.department_id),
+    [accessibleDocs]
+  )
+
+  // Ghép file gốc vào đúng từng thẻ phòng ban
+  function getDocsForCard(keywords: string[]): DocRow[] {
+    return accessibleDocs.filter((d) => {
+      if (!d.department_id) return false
+      const deptName = depts.find((x) => x.id === d.department_id)?.name?.toLowerCase() ?? ''
+      return keywords.some((kw) => deptName.includes(kw))
+    })
+  }
+
+  async function openOriginalFile(d: DocRow, inline: boolean) {
+    setFileError('')
+    try {
+      const url = await signedUrl(d.storage_path, inline ? undefined : d.file_name ?? undefined)
+      window.open(url, '_blank', 'noopener')
+    } catch (e: unknown) {
+      setFileError((e as { message?: string })?.message ?? 'Không mở được tệp gốc. Thử lại sau.')
+    }
+  }
 
   const activeStation = STATIONS.find((s) => s.id === selectedStation) ?? null
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-8">
+    <div className="mx-auto max-w-6xl space-y-6 pb-10">
       {/* 1. HERO BANNER TỐI MÀU (OKWAY PRECISION) */}
       <section className="flex flex-col justify-between gap-5 rounded-2xl bg-slate-900 p-6 text-white shadow-sm sm:p-7 lg:flex-row lg:items-center">
         <div className="space-y-2.5">
@@ -150,7 +205,7 @@ export function Home() {
           to="/projects"
           className="inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-teal-500 px-6 text-sm font-extrabold text-slate-950 shadow-xs transition hover:bg-teal-400"
         >
-          Phân tích chi tiết <ArrowRight size={16} />
+          Đề bài chi tiết các phòng <ArrowRight size={16} />
         </Link>
       </section>
 
@@ -216,7 +271,7 @@ export function Home() {
       </section>
 
       {/* 4. SƠ ĐỒ 4 TRẠM LINE 3 */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs space-y-4">
+      <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Layers size={18} className="text-slate-700" />
@@ -273,9 +328,8 @@ export function Home() {
           })}
         </div>
 
-        {/* Ngăn kéo hiển thị Nhật ký thô khi bấm vào trạm */}
         {activeStation && (
-          <div className="rounded-xl border border-slate-300 bg-slate-900 p-4 text-white space-y-2.5">
+          <div className="space-y-2.5 rounded-xl border border-slate-300 bg-slate-900 p-4 text-white">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-extrabold uppercase text-teal-300">
                 <AlertTriangle size={14} />
@@ -286,7 +340,7 @@ export function Home() {
                 onClick={() => navigate('/projects')}
                 className="rounded-lg bg-teal-500 px-3 py-1 text-xs font-extrabold text-slate-950 hover:bg-teal-400"
               >
-                Đưa sang Bàn Phân Tích →
+                Xem đề bài phòng ban →
               </button>
             </div>
             <ul className="list-disc space-y-1 pl-5 text-xs text-slate-200">
@@ -298,31 +352,142 @@ export function Home() {
         )}
       </section>
 
-      {/* 5. HỒ SƠ DỮ LIỆU 6 PHÒNG BAN */}
-      <section className="space-y-3">
+      {/* 5. HỒ SƠ DỮ LIỆU GỐC (CHỨA CÁC FILE GỐC TỪ SUPABASE STORAGE) */}
+      <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-slate-900">Hồ Sơ Dữ Liệu 6 Phòng Ban</h2>
-          <span className="text-xs text-slate-500">Bấm để mở hồ sơ chi tiết trong Trung tâm Dự án</span>
+          <div className="flex items-center gap-2">
+            <FolderOpen size={18} className="text-teal-700" />
+            <h2 className="text-base font-bold text-slate-900">Hồ Sơ Dữ Liệu Gốc (Tệp Gốc Dự Án)</h2>
+          </div>
+          <Link
+            to="/documents"
+            className="text-xs font-bold text-teal-700 hover:underline"
+          >
+            {isAdmin ? '+ Tải thêm file gốc trong Kho tài liệu →' : 'Mở toàn bộ Kho tài liệu →'}
+          </Link>
         </div>
 
+        {fileError && (
+          <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+            {fileError}
+          </p>
+        )}
+
+        {/* Khối file gốc dùng chung cho toàn bộ hội trường */}
+        {sharedDocs.length > 0 && (
+          <div className="rounded-xl border border-teal-200 bg-teal-50/50 p-4 space-y-2.5">
+            <div className="text-xs font-extrabold uppercase tracking-wide text-teal-900">
+              Tài liệu nền tảng chung (Tất cả phòng ban)
+            </div>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {sharedDocs.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-teal-200 bg-white px-3.5 py-2.5"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <FileText size={16} className="shrink-0 text-teal-600" />
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-bold text-slate-900">{doc.title}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {doc.file_name} · {fmtSize(doc.size_bytes)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {canPreview(doc.file_name) && (
+                      <button
+                        type="button"
+                        onClick={() => void openOriginalFile(doc, true)}
+                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2.5 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                      >
+                        <ExternalLink size={12} /> Xem
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void openOriginalFile(doc, false)}
+                      className="inline-flex items-center gap-1 rounded-md bg-slate-900 px-2.5 py-1 text-[11px] font-bold text-white hover:bg-slate-800"
+                    >
+                      <Download size={12} /> Tải về
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 6 Thẻ Hồ sơ gốc theo từng phòng ban */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {DEPARTMENTS_CARDS.map((dept) => (
-            <Link
-              key={dept.key}
-              to={`/projects?dept=${dept.key}`}
-              className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition hover:border-teal-600 hover:shadow-sm"
-            >
-              <div>
-                <h3 className="text-base font-bold text-slate-900 group-hover:text-teal-700">
-                  {dept.title}
-                </h3>
-                <p className="mt-1.5 text-xs leading-relaxed text-slate-500">{dept.desc}</p>
+          {DEPARTMENTS_CARDS.map((card) => {
+            const deptDocs = getDocsForCard(card.matchKeywords)
+            return (
+              <div
+                key={card.key}
+                className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-5 shadow-2xs"
+              >
+                <div className="space-y-2.5">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">{card.title}</h3>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.desc}</p>
+                  </div>
+
+                  {/* Danh sách file gốc gắn cho phòng ban này */}
+                  {deptDocs.length > 0 ? (
+                    <ul className="space-y-1.5 border-t border-slate-100 pt-2.5">
+                      {deptDocs.map((doc) => (
+                        <li
+                          key={doc.id}
+                          className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-2 text-xs"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <FileText size={14} className="shrink-0 text-teal-600" />
+                            <span className="truncate font-semibold text-slate-800" title={doc.title}>
+                              {doc.title}
+                            </span>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {canPreview(doc.file_name) && (
+                              <button
+                                type="button"
+                                onClick={() => void openOriginalFile(doc, true)}
+                                className="rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100"
+                              >
+                                Mở
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => void openOriginalFile(doc, false)}
+                              className="rounded bg-teal-600 px-2 py-0.5 text-[11px] font-bold text-white hover:bg-teal-700"
+                            >
+                              Tải
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-[11px] text-slate-400">
+                      {docsQuery.isLoading
+                        ? 'Đang kiểm tra tệp gốc…'
+                        : 'Chưa có tệp riêng hoặc thuộc phòng ban khác'}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 border-t border-slate-100 pt-3">
+                  <Link
+                    to={`/projects?dept=${card.key}`}
+                    className="inline-flex items-center gap-1 text-xs font-extrabold text-teal-700 hover:text-teal-800"
+                  >
+                    Xem đề bài & số liệu chi tiết <ArrowRight size={13} />
+                  </Link>
+                </div>
               </div>
-              <div className="mt-4 text-xs font-extrabold text-teal-600 group-hover:translate-x-0.5 transition-transform">
-                {dept.cta}
-              </div>
-            </Link>
-          ))}
+            )
+          })}
         </div>
       </section>
     </div>

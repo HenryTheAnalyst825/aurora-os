@@ -1,75 +1,299 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Award, BookOpen, CheckCircle2, FolderKanban, Plus, Send, Sparkles, Tag } from 'lucide-react'
+import { BookOpen, Download, ExternalLink, FileText, FolderKanban } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
+import { fetchDocuments, signedUrl } from '../documents/api'
+import { canPreview, fmtSize } from '../documents/files'
+import { useMyDepartmentId } from '../documents/hooks'
+import type { Dept } from '../documents/types'
 import { createProject, fetchProjects } from './api'
 
-type CaseStudy = {
-  id: string
-  tag_code: string
-  department_tag: string
+type DeptKey = 'production' | 'qc' | 'ehs' | 'hr' | 'finance' | 'rnd'
+
+type DataTableBlock = {
   title: string
-  role_title: string
-  difficulty: string
-  reward_credits: number
-  scenario: string
-  questions: string
-  created_at: string
+  headers: string[]
+  rows: string[][]
 }
 
-type CaseSubmission = {
-  id: string
-  case_id: string
-  user_id: string
-  analysis: string
-  solution: string
-  status: 'submitted' | 'approved'
-  awarded_credits: number
-  created_at: string
-  profiles?: { full_name: string } | null
+type DeptBrief = {
+  key: DeptKey
+  tabLabel: string
+  title: string
+  matchKeywords: string[]
+  mission: string
+  metrics: { label: string; value: string }[]
+  tables: DataTableBlock[]
+  deliverables: string[]
 }
 
-const DEPT_TAGS = ['ALL', 'QC/QA', 'EHS', 'R&D', 'HR', 'FINANCE', 'SALES'] as const
-
-const TAG_BADGE_STYLE: Record<string, string> = {
-  'QC/QA': 'bg-cyan-100 text-cyan-900 border-cyan-300',
-  EHS: 'bg-emerald-100 text-emerald-900 border-emerald-300',
-  'R&D': 'bg-purple-100 text-purple-900 border-purple-300',
-  HR: 'bg-amber-100 text-amber-900 border-amber-300',
-  FINANCE: 'bg-blue-100 text-blue-900 border-blue-300',
-  SALES: 'bg-rose-100 text-rose-900 border-rose-300',
-}
-
-async function fetchCaseStudies(): Promise<CaseStudy[]> {
-  const { data, error } = await supabase
-    .from('case_studies')
-    .select('*')
-    .order('created_at', { ascending: true })
-  if (error) throw error
-  return (data ?? []) as CaseStudy[]
-}
-
-async function fetchCaseSubmissions(caseId: string): Promise<CaseSubmission[]> {
-  const { data, error } = await supabase
-    .from('case_submissions')
-    .select('*, profiles(full_name)')
-    .eq('case_id', caseId)
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  return (data ?? []) as unknown as CaseSubmission[]
+const DEPT_BRIEFS: Record<DeptKey, DeptBrief> = {
+  production: {
+    key: 'production',
+    tabLabel: 'Sản xuất',
+    title: '1. Đề Bài Phòng Sản Xuất (Production)',
+    matchKeywords: ['sản xuất', 'production'],
+    mission:
+      'Đánh giá năng lực vận hành hiện tại của Dây chuyền 3 và đề xuất kế hoạch nâng sản lượng từ ~10.000 lên 40.000 sản phẩm/tháng trong 90 ngày.',
+    metrics: [
+      { label: 'Tổng thời gian khảo sát', value: '12.480 phút (26 ca)' },
+      { label: 'OEE trung bình', value: '~48,0%' },
+      { label: 'Tổn thất dừng máy', value: '118 lần · 4.060 phút' },
+      { label: 'Tổn thất tốc độ', value: '2.396 phút' },
+    ],
+    tables: [
+      {
+        title: 'Bảng 1A: Phân bổ dừng máy theo 4 trạm trên Line 3 (26 ca khảo sát)',
+        headers: ['Trạm', 'Công đoạn', 'Số lần dừng', 'Tổng thời gian', 'Ghi nhận hiện trường'],
+        rows: [
+          ['ST-01', 'Cấp phôi & Định hình', '24 lần', '740 phút', '18 lần dừng vặt < 5 phút do lệch băng dẫn phôi'],
+          ['ST-02', 'Gia công chính xác', '46 lần', '1.680 phút', '18 lần đổi khuôn (1.420p) + 28 lần kẹt cơ khí/quá nhiệt'],
+          ['ST-03', 'Kiểm tra & Cảm biến', '31 lần', '1.090 phút', '22 lần cảm biến quang báo dừng giả cuối ca'],
+          ['ST-04', 'Đóng gói & Xuất xưởng', '17 lần', '550 phút', 'Chờ bán thành phẩm từ trạm trước & thay cuộn tem'],
+        ],
+      },
+      {
+        title: 'Bảng 1B: Nhật ký mẫu quan sát hiện trường (D04 – D25)',
+        headers: ['Mã mẫu', 'Ca làm việc', 'Trạm', 'Thời lượng', 'Nội dung ghi nhận'],
+        rows: [
+          ['D04', 'Ca 1 (Ngày)', 'ST-02', '85 phút', 'Chuyển đổi khuôn mã hàng A sang B, siết 16 bu-lông thủ công'],
+          ['D08', 'Ca 2 (Đêm)', 'ST-01', '32 phút', 'Lệch băng dẫn phôi đầu ca, dừng máy chỉnh cơ khí 4 lần'],
+          ['D12', 'Ca 1 (Ngày)', 'ST-02', '64 phút', 'Quá nhiệt cụm gia công khi chạy liên tục giờ thứ 6'],
+          ['D16', 'Ca 2 (Đêm)', 'ST-03', '45 phút', 'Cảm biến quang báo lỗi giả liên tục, phải vệ sinh thủ công'],
+          ['D21', 'Ca 2 (Đêm)', 'ST-02', '92 phút', 'Đổi khuôn ca đêm thiếu kỹ thuật viên chính, chờ hỗ trợ 30 phút'],
+          ['D25', 'Ca 1 (Ngày)', 'ST-04', '28 phút', 'Gián đoạn đóng gói do thiếu phôi đầu vào từ trạm ST-03'],
+        ],
+      },
+    ],
+    deliverables: [
+      'Xác định các nguyên nhân làm giảm OEE trên Line 3.',
+      'Đề xuất lộ trình nâng công suất lên 40.000 sp/tháng theo từng chặng 30 – 60 – 90 ngày.',
+    ],
+  },
+  qc: {
+    key: 'qc',
+    tabLabel: 'QA/QC',
+    title: '2. Đề Bài Phòng Chất Lượng (QA/QC)',
+    matchKeywords: ['chất lượng', 'qc', 'qa'],
+    mission:
+      'Kiểm soát tỷ lệ lỗi sản phẩm khi tăng tốc độ dây chuyền, đảm bảo ngưỡng lỗi khách hàng dưới 500 ppm (< 0,05%) và không để lọt lỗi ra ngoài.',
+    metrics: [
+      { label: 'Mẫu bị từ chối (26 ca)', value: '56 mẫu' },
+      { label: 'Hàng phải làm lại (Rework)', value: '470 sản phẩm' },
+      { label: 'Tỷ lệ lỗi khách hàng', value: '1.100 ppm (Mục tiêu < 500)' },
+      { label: 'Chu kỳ lấy mẫu hiện tại', value: '30 phút / lần' },
+    ],
+    tables: [
+      {
+        title: 'Bảng 2A: Thống kê phân loại lỗi ghi nhận tại Trạm ST-03 & Phòng Lab',
+        headers: ['Nhóm lỗi', 'Số lượng mẫu', 'Tỷ trọng', 'Thông số kỹ thuật ghi nhận'],
+        rows: [
+          ['Sai lệch kích thước khớp nối', '34 mẫu', '60,7%', 'Vượt dung sai ±0,05 mm sau các lần chuyển đổi mã hàng'],
+          ['Rò rỉ vi mô đường hàn', '22 mẫu', '39,3%', 'Không đạt áp suất thử kín tại Trạm ST-03'],
+          ['Hàng làm lại (Rework)', '470 sản phẩm', '100% đạt sau sửa', 'Tốn thêm 18 giờ công kiểm tra & gia công lại'],
+          ['Thiết bị đo độ bền kéo (Lab)', '—', '—', 'Quá hạn hiệu chuẩn định kỳ 40 ngày chưa bảo trì'],
+        ],
+      },
+    ],
+    deliverables: [
+      'Đề xuất phương án kiểm soát chất lượng trên chuyền (In-line QC) khi tăng sản lượng gấp 4 lần.',
+      'Xây dựng quy trình ngăn ngừa lỗi tái diễn sau mỗi lần chuyển đổi khuôn.',
+    ],
+  },
+  ehs: {
+    key: 'ehs',
+    tabLabel: 'An toàn EHS',
+    title: '3. Đề Bài Phòng An Toàn & Môi Trường (EHS)',
+    matchKeywords: ['an toàn', 'ehs', 'môi trường'],
+    mission:
+      'Đảm bảo mục tiêu 0 tai nạn lao động và tuân thủ giới hạn xả thải môi trường khi Line 3 vận hành tăng cường 3 ca liên tục.',
+    metrics: [
+      { label: 'Sự cố suýt tai nạn (Near-Miss)', value: '6 vụ trên Line 3' },
+      { label: 'Tải lượng xử lý nước thải', value: '92% công suất thiết kế' },
+      { label: 'Độ ồn tại cụm ST-02', value: '86 dBA (ca cao điểm)' },
+      { label: 'Ngân sách hạng mục B04', value: '140 triệu VNĐ' },
+    ],
+    tables: [
+      {
+        title: 'Bảng 3A: Nhật ký chi tiết 6 vụ Near-Miss ghi nhận trên Line 3',
+        headers: ['Mã sự cố', 'Vị trí', 'Ca làm việc', 'Tình huống ghi nhận'],
+        rows: [
+          ['NM-L3-01', 'Trạm ST-02', 'Ca 1 (Ngày)', 'Công nhân đưa tay gạt phôi kẹt khi băng tải chưa dừng hẳn'],
+          ['NM-L3-02', 'Trạm ST-03', 'Ca 2 (Đêm)', 'Thao tác lấy mẫu kiểm tra gần cụm cảm biến khi máy đang chạy'],
+          ['NM-L3-03', 'Trạm ST-02', 'Ca 2 (Đêm)', 'Găng tay bảo hộ quá rộng bị vướng nhẹ vào thanh dẫn hướng'],
+          ['NM-L3-04', 'Trạm ST-03', 'Ca 1 (Ngày)', 'Vệ sinh mắt cảm biến quang học khi chưa ngắt nguồn khí nén'],
+          ['NM-L3-05', 'Khu vực ST-01', 'Ca 1 (Ngày)', 'Trượt chân do rò rỉ dầu bôi trơn dưới sàn thao tác'],
+          ['NM-L3-06', 'Tủ điều khiển phụ', 'Ca 2 (Đêm)', 'Mở nắp tủ kiểm tra rơ-le nhưng chưa thực hiện khóa nguồn LOTO'],
+        ],
+      },
+    ],
+    deliverables: [
+      'Đề xuất giải pháp kỹ thuật và quy trình loại bỏ nguy cơ tai nạn tại ST-02 và ST-03.',
+      'Phương án kiểm soát tải lượng nước thải và tiếng ồn trong giới hạn ngân sách.',
+    ],
+  },
+  hr: {
+    key: 'hr',
+    tabLabel: 'Nhân sự HR',
+    title: '4. Đề Bài Phòng Nhân Sự (HR)',
+    matchKeywords: ['nhân sự', 'hr'],
+    mission:
+      'Hoạch định định biên nhân sự, lịch chia ca và chương trình đào tạo đa kỹ năng để vận hành ổn định sản lượng 40.000 sp/tháng.',
+    metrics: [
+      { label: 'Định biên hiện tại', value: '18 người / ca' },
+      { label: 'Tỷ lệ nghỉ việc (< 6 tháng)', value: '22% / năm' },
+      { label: 'Nhân sự biết đổi khuôn', value: '35% tổng quân số' },
+      { label: 'Tỷ lệ tăng ca (OT)', value: '+28% so với quý trước' },
+    ],
+    tables: [
+      {
+        title: 'Bảng 4A: Hồ sơ nhân sự & năng lực vận hành mẫu trên Line 3 (NS-01 – NS-05)',
+        headers: ['Mã hồ sơ', 'Vị trí / Nhóm', 'Thâm niên', 'Chứng chỉ kỹ năng', 'Ghi nhận vận hành'],
+        rows: [
+          ['NS-01', 'Kỹ thuật viên trưởng ca', '4,5 năm', 'Bậc 4/4 (Đổi khuôn & Bảo trì)', 'Chỉ có 3 người toàn xưởng, phải trực chéo cả ca đêm'],
+          ['NS-02', 'Tổ trưởng dây chuyền', '3,0 năm', 'Bậc 3/4 (Vận hành tổng hợp)', 'Thạo vận hành nhưng chưa được cấp quyền chỉnh thông số khuôn'],
+          ['NS-03', 'Vận hành viên Trạm ST-02', '1,5 năm', 'Bậc 2/4 (Vận hành cơ bản)', 'Đứng máy ổn định, chưa biết quy trình tháo lắp khuôn nhanh'],
+          ['NS-04', 'Vận hành viên ca đêm', '4 tháng', 'Bậc 1/4 (Đào tạo tại chỗ)', 'Thường xuyên tăng ca > 10h/ngày, tỷ lệ sai thao tác cao'],
+          ['NS-05', 'Nhân sự mới tuyển', '1,5 tháng', 'Chưa hoàn thành sát hạch', 'Chưa được thực hành xử lý kẹt phôi an toàn trên Line 3'],
+        ],
+      },
+    ],
+    deliverables: [
+      'Đề xuất phương án bố trí ca kíp và giảm phụ thuộc vào tăng ca (OT) kéo dài.',
+      'Kế hoạch đào tạo chéo (Cross-training) nâng tỷ lệ nhân sự biết đổi khuôn.',
+    ],
+  },
+  finance: {
+    key: 'finance',
+    tabLabel: 'Tài chính',
+    title: '5. Đề Bài Phòng Tài Chính (Finance)',
+    matchKeywords: ['tài chính', 'kế toán', 'finance'],
+    mission:
+      'Phân bổ ngân sách đầu tư (CAPEX) trong trần 1.710 triệu VNĐ và kiểm soát giá thành đơn vị khi mở rộng sản lượng lên 40.000 sp/tháng.',
+    metrics: [
+      { label: 'Trần ngân sách phê duyệt', value: '1.710 triệu VNĐ' },
+      { label: 'Tác động dừng máy lên giá vốn', value: '+14% giá thành đơn vị' },
+      { label: 'Chi phí tăng ca OT hiện tại', value: '185 triệu VNĐ / tháng' },
+      { label: 'Thời hạn hoàn vốn yêu cầu', value: '≤ 12 tháng' },
+    ],
+    tables: [
+      {
+        title: 'Bảng 5A: Danh mục chi tiết 9 hạng mục đề xuất ngân sách (B01 – B09)',
+        headers: ['Mã', 'Hạng mục đề xuất', 'Chi phí dự kiến', 'Phòng ban đề xuất'],
+        rows: [
+          ['B01', 'Bộ gá kẹp nhanh chuyển đổi khuôn (Changeover) ST-02', '260 triệu VNĐ', 'Sản xuất & Kỹ thuật'],
+          ['B02', 'Cải tạo hệ thống tản nhiệt & truyền động cụm ST-02', '220 triệu VNĐ', 'Sản xuất'],
+          ['B03', 'Hệ thống cảm biến quang & camera kiểm lỗi In-line ST-03', '310 triệu VNĐ', 'QA/QC'],
+          ['B04', 'Che chắn an toàn liên động, khóa LOTO & xử lý nước thải', '140 triệu VNĐ', 'An toàn EHS'],
+          ['B05', 'Chương trình đào tạo chéo & sát hạch tay nghề 3 ca', '120 triệu VNĐ', 'Nhân sự HR'],
+          ['B06', 'Chuẩn hóa bộ khuôn & hiệu chỉnh thông số vật liệu mới', '180 triệu VNĐ', 'R&D / Kỹ thuật'],
+          ['B07', 'Gói phụ tùng thay thế chiến lược (Spare parts) 90 ngày', '120 triệu VNĐ', 'Bảo trì & Sản xuất'],
+          ['B08', 'Chi phí chạy thử nghiệm Pilot Run & hiệu chuẩn thiết bị Lab', '160 triệu VNĐ', 'R&D & QA/QC'],
+          ['B09', 'Quỹ dự phòng rủi ro vận hành & biến động đơn hàng', '200 triệu VNĐ', 'Tài chính'],
+        ],
+      },
+    ],
+    deliverables: [
+      'Đánh giá hiệu quả tài chính và thứ tự ưu tiên giải ngân các hạng mục B01–B09 trong trần 1.710 triệu VNĐ.',
+      'Tính toán mức giảm giá thành đơn vị khi OEE đạt mục tiêu.',
+    ],
+  },
+  rnd: {
+    key: 'rnd',
+    tabLabel: 'R&D / Kỹ thuật',
+    title: '6. Đề Bài Phòng Nghiên Cứu & Kỹ Thuật (R&D)',
+    matchKeywords: ['nghiên cứu', 'kỹ thuật', 'r&d', 'rd'],
+    mission:
+      'Tối ưu thông số kỹ thuật khuôn mẫu, độ tương thích vật liệu mới và đánh giá 2 gói giải pháp nâng cấp thiết bị trên Line 3.',
+    metrics: [
+      { label: 'Thời gian đổi khuôn chuẩn', value: '78 phút / lần (16 bu-lông)' },
+      { label: 'Độ co ngót vật liệu mới', value: 'Lệch 0,15% so với chuẩn cũ' },
+      { label: 'Gói nâng cấp A', value: '360 triệu · 35 ngày triển khai' },
+      { label: 'Gói nâng cấp B', value: '260 triệu · 20 ngày triển khai' },
+    ],
+    tables: [
+      {
+        title: 'Bảng 6A: So sánh thông số kỹ thuật 2 gói cải tiến thiết bị Trạm ST-02',
+        headers: ['Tiêu chí', 'Gói A (Tự động hóa toàn phần)', 'Gói B (Cơ cấu kẹp nhanh bán tự động)'],
+        rows: [
+          ['Chi phí đầu tư', '360 triệu VNĐ', '260 triệu VNĐ'],
+          ['Thời gian lắp đặt & dừng máy', '35 ngày', '20 ngày'],
+          ['Thời gian đổi khuôn sau cải tiến', '12 phút / lần', '22 phút / lần'],
+          ['Yêu cầu trình độ vận hành', 'Cần kỹ sư chuyên trách lập trình', 'Công nhân hiện tại thao tác được sau 2 ngày đào tạo'],
+          ['Khả năng tương thích vật liệu mới', 'Cần nâng cấp thêm bộ điều khiển nhiệt', 'Tương thích trực tiếp với dải nhiệt hiện tại'],
+        ],
+      },
+    ],
+    deliverables: [
+      'Lựa chọn phương án kỹ thuật phù hợp với tiến độ 90 ngày và điều kiện nhân sự hiện tại.',
+      'Đề xuất bộ thông số nhiệt độ – áp suất chuẩn cho lô vật liệu polymer mới.',
+    ],
+  },
 }
 
 export function ProjectsPage() {
-  const { profile, refreshProfile } = useAuth()
+  const { profile } = useAuth()
   const qc = useQueryClient()
   const isAdmin = profile?.role === 'admin'
+  const myDeptId = useMyDepartmentId().data ?? null
 
-  // Chuyển đổi giữa tab Dự án thường và tab Case Study
-  const [activeTab, setActiveTab] = useState<'projects' | 'cases'>('cases')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const paramDept = searchParams.get('dept') as DeptKey | null
 
-  // --- State cho Tab Dự án Kanban ---
+  const [activeTab, setActiveTab] = useState<'briefs' | 'projects'>('briefs')
+  const [activeDept, setActiveDept] = useState<DeptKey>(
+    paramDept && DEPT_BRIEFS[paramDept] ? paramDept : 'production'
+  )
+  const [fileError, setFileError] = useState('')
+
+  useEffect(() => {
+    if (paramDept && DEPT_BRIEFS[paramDept]) {
+      setActiveTab('briefs')
+      setActiveDept(paramDept)
+    }
+  }, [paramDept])
+
+  const docsQuery = useQuery({ queryKey: ['documents'], queryFn: fetchDocuments })
+  const { data: depts = [] } = useQuery({
+    queryKey: ['departments'],
+    queryFn: async () =>
+      ((await supabase.from('departments').select('id, name').order('name')).data ?? []) as Dept[],
+  })
+
+  const brief = DEPT_BRIEFS[activeDept]
+
+  const deptFiles = useMemo(() => {
+    return (docsQuery.data ?? []).filter((d) => {
+      const canSee =
+        isAdmin ||
+        d.uploaded_by === profile?.id ||
+        !d.department_id ||
+        (myDeptId !== null && d.department_id === myDeptId)
+      if (!canSee || !d.department_id) return false
+      const deptName = depts.find((x) => x.id === d.department_id)?.name?.toLowerCase() ?? ''
+      return brief.matchKeywords.some((kw) => deptName.includes(kw))
+    })
+  }, [docsQuery.data, depts, brief.matchKeywords, isAdmin, profile?.id, myDeptId])
+
+  function selectDept(k: DeptKey) {
+    setActiveDept(k)
+    const next = new URLSearchParams(searchParams)
+    next.set('dept', k)
+    setSearchParams(next)
+  }
+
+  async function openOriginalFile(storagePath: string, fileName: string | null, inline: boolean) {
+    setFileError('')
+    try {
+      const url = await signedUrl(storagePath, inline ? undefined : fileName ?? undefined)
+      window.open(url, '_blank', 'noopener')
+    } catch (e: unknown) {
+      setFileError((e as { message?: string })?.message ?? 'Không mở được tệp gốc.')
+    }
+  }
+
   const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
@@ -82,138 +306,30 @@ export function ProjectsPage() {
     },
   })
 
-  // --- State cho Tab Case Study ---
-  const [selectedDept, setSelectedDept] = useState<string>('ALL')
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null)
-  const [analysis, setAnalysis] = useState('')
-  const [solution, setSolution] = useState('')
-  const [caseMsg, setCaseMsg] = useState('')
-  const [caseErr, setCaseErr] = useState('')
-  const [showNewCaseForm, setShowNewCaseForm] = useState(false)
-
-  // State tạo Case Study mới (dành cho Admin)
-  const [newTagCode, setNewTagCode] = useState('')
-  const [newDeptTag, setNewDeptTag] = useState('QC/QA')
-  const [newTitle, setNewTitle] = useState('')
-  const [newRole, setNewRole] = useState('')
-  const [newReward, setNewReward] = useState(150)
-  const [newScenario, setNewScenario] = useState('')
-  const [newQuestions, setNewQuestions] = useState('')
-
-  const casesQuery = useQuery({
-    queryKey: ['case-studies'],
-    queryFn: fetchCaseStudies,
-  })
-
-  const filteredCases = useMemo(() => {
-    const list = casesQuery.data ?? []
-    if (selectedDept === 'ALL') return list
-    return list.filter((c) => c.department_tag.toUpperCase() === selectedDept)
-  }, [casesQuery.data, selectedDept])
-
-  const activeCase = useMemo(() => {
-    const list = filteredCases.length > 0 ? filteredCases : (casesQuery.data ?? [])
-    return list.find((c) => c.id === selectedCaseId) ?? list[0] ?? null
-  }, [filteredCases, casesQuery.data, selectedCaseId])
-
-  const submissionsQuery = useQuery({
-    queryKey: ['case-submissions', activeCase?.id],
-    queryFn: () => fetchCaseSubmissions(activeCase!.id),
-    enabled: Boolean(activeCase?.id),
-  })
-
-  const submitSolution = useMutation({
-    mutationFn: async () => {
-      if (!activeCase || !profile) return
-      const { error } = await supabase.from('case_submissions').upsert(
-        {
-          case_id: activeCase.id,
-          user_id: profile.id,
-          analysis: analysis.trim(),
-          solution: solution.trim(),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'case_id,user_id' }
-      )
-      if (error) throw error
-    },
-    onSuccess: () => {
-      setCaseErr('')
-      setCaseMsg('Đã lưu và nộp bài giải Case Study thành công!')
-      qc.invalidateQueries({ queryKey: ['case-submissions', activeCase?.id] })
-    },
-    onError: (e: unknown) => {
-      setCaseMsg('')
-      setCaseErr((e as { message?: string })?.message ?? 'Không thể nộp bài giải.')
-    },
-  })
-
-  const approveSubmission = useMutation({
-    mutationFn: async (submissionId: string) => {
-      const { error } = await supabase.rpc('approve_case_submission', {
-        p_submission_id: submissionId,
-      })
-      if (error) throw error
-    },
-    onSuccess: async () => {
-      qc.invalidateQueries({ queryKey: ['case-submissions', activeCase?.id] })
-      if (refreshProfile) await refreshProfile()
-    },
-    onError: (e: unknown) => {
-      setCaseErr((e as { message?: string })?.message ?? 'Không thể duyệt thưởng.')
-    },
-  })
-
-  const createCaseMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('case_studies').insert({
-        tag_code: newTagCode.trim() || `${newDeptTag} - CASE`,
-        department_tag: newDeptTag,
-        title: newTitle.trim(),
-        role_title: newRole.trim() || 'Department Manager',
-        difficulty: 'Trung bình',
-        reward_credits: newReward,
-        scenario: newScenario.trim(),
-        questions: newQuestions.trim(),
-      })
-      if (error) throw error
-    },
-    onSuccess: () => {
-      setNewTagCode('')
-      setNewTitle('')
-      setNewRole('')
-      setNewScenario('')
-      setNewQuestions('')
-      setShowNewCaseForm(false)
-      qc.invalidateQueries({ queryKey: ['case-studies'] })
-    },
-  })
-
   const input =
     'mt-1 block min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-base font-normal focus:outline-2 focus:outline-accent'
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      {/* Header & Thanh chuyển đổi Tab Dự án / Case Study */}
       <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Trung tâm Dự án & Case Study Phòng Ban</h1>
+          <h1 className="text-xl font-bold text-slate-900">Trung tâm Dự án & Hồ Sơ Phòng Ban</h1>
           <p className="mt-1 text-sm text-slate-600">
-            Quản lý tiến độ công việc theo dự án hoặc tham gia giải Case Study nghiệp vụ để tích lũy Aurora Credits.
+            Tra cứu đề bài, dữ liệu hiện trường từng phòng ban (Line 3 Expansion) hoặc theo dõi Bảng Dự Án Kanban.
           </p>
         </div>
         <div className="inline-flex rounded-xl bg-slate-100 p-1" role="tablist">
           <button
             type="button"
             role="tab"
-            aria-selected={activeTab === 'cases'}
-            onClick={() => setActiveTab('cases')}
+            aria-selected={activeTab === 'briefs'}
+            onClick={() => setActiveTab('briefs')}
             className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold transition ${
-              activeTab === 'cases' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-200'
+              activeTab === 'briefs' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <BookOpen aria-hidden="true" size="{16}"/>
-            Case Study ({casesQuery.data?.length ?? 0})
+            <BookOpen aria-hidden="true" size={16} />
+            Hồ Sơ 6 Phòng Ban
           </button>
           <button
             type="button"
@@ -224,365 +340,146 @@ export function ProjectsPage() {
               activeTab === 'projects' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-200'
             }`}
           >
-            <FolderKanban aria-hidden="true" size="{16}"/>
+            <FolderKanban aria-hidden="true" size={16} />
             Bảng Dự Án ({projects.length})
           </button>
         </div>
       </div>
 
-      {/* ================= NHÁNH 1: THƯ VIỆN CASE STUDY THEO PHÒNG BAN ================= */}
-      {activeTab === 'cases' && (
-        <div className="space-y-5">
-          {/* Thanh lọc Tag theo Phòng ban */}
+      {activeTab === 'briefs' && (
+        <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500">
-                <Tag aria-hidden="true" size="{14}"/>
-                Tag Phòng Ban:
-              </span>
-              {DEPT_TAGS.map((tag) => {
-                const active = selectedDept === tag
+            <div className="flex flex-wrap gap-2">
+              {(Object.keys(DEPT_BRIEFS) as DeptKey[]).map((key) => {
+                const active = activeDept === key
                 return (
                   <button
-                    key={tag}
+                    key={key}
                     type="button"
-                    onClick={() => setSelectedDept(tag)}
-                    className={`min-h-9 rounded-full border px-3.5 text-xs font-bold transition ${
+                    onClick={() => selectDept(key)}
+                    className={`min-h-10 rounded-xl px-4 text-xs font-bold transition ${
                       active
-                        ? 'border-slate-900 bg-slate-900 text-white'
-                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'border border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-400 hover:bg-white'
                     }`}
                   >
-                    {tag === 'ALL' ? 'Tất cả phòng ban' : tag}
+                    {DEPT_BRIEFS[key].tabLabel}
                   </button>
                 )
               })}
             </div>
-
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setShowNewCaseForm((v) => !v)}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-              >
-                <Plus aria-hidden="true" size="{14}"/>
-                {showNewCaseForm ? 'Đóng form thêm Case' : 'Thêm Case Study'}
-              </button>
-            )}
+            <Link to="/documents" className="text-xs font-bold text-teal-700 hover:underline">
+              Mở Kho tài liệu gốc →
+            </Link>
           </div>
 
-          {/* Form Admin tạo thêm Case mới nếu cần */}
-          {isAdmin && showNewCaseForm && (
-            <form
-              onSubmit={(e: FormEvent) => {
-                e.preventDefault()
-                createCaseMutation.mutate()
-              }}
-              className="rounded-xl border border-slate-300 bg-slate-50 p-5 space-y-4"
-            >
-              <h2 className="font-bold text-slate-900">Thêm Case Study mới vào Thư viện</h2>
-              <div className="grid gap-4 sm:grid-cols-4">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Phòng ban (Tag)
-                  <select
-                    value={newDeptTag}
-                    onChange={(e) => setNewDeptTag(e.target.value)}
-                    className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-                  >
-                    {DEPT_TAGS.filter((t) => t !== 'ALL').map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block text-xs font-semibold text-slate-700">
-                  Mã Tag (VD: QC/QA - CASE 3)
-                  <input
-                    value={newTagCode}
-                    onChange={(e) => setNewTagCode(e.target.value)}
-                    placeholder="QC/QA - CASE 3"
-                    className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-                  />
-                </label>
-                <label className="block text-xs font-semibold text-slate-700">
-                  Vai trò đóng vai
-                  <input
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value)}
-                    placeholder="QA/QC Manager"
-                    className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-                  />
-                </label>
-                <label className="block text-xs font-semibold text-slate-700">
-                  Thưởng Credits
-                  <input
-                    type="number"
-                    min={0}
-                    step={50}
-                    value={newReward}
-                    onChange={(e) => setNewReward(Number(e.target.value))}
-                    className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-                  />
-                </label>
+          <article className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs sm:p-8">
+            <div className="space-y-2 border-b border-slate-100 pb-5">
+              <div className="text-[11px] font-extrabold uppercase tracking-wider text-teal-700">
+                DỰ ÁN MỞ RỘNG DÂY CHUYỀN 3 · OKWAY PRECISION VIETNAM
               </div>
-              <label className="block text-xs font-semibold text-slate-700">
-                Tiêu đề Case Study
-                <input
-                  required
-                  value={newTitle}
-                  onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="Nhập tiêu đề tình huống..."
-                  className="mt-1 block min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
-                />
-              </label>
-              <label className="block text-xs font-semibold text-slate-700">
-                Nội dung bối cảnh & Dữ kiện đề bài
-                <textarea
-                  required
-                  rows={5}
-                  value={newScenario}
-                  onChange={(e) => setNewScenario(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white p-3 text-sm"
-                />
-              </label>
-              <label className="block text-xs font-semibold text-slate-700">
-                Câu hỏi yêu cầu giải quyết
-                <textarea
-                  required
-                  rows={3}
-                  value={newQuestions}
-                  onChange={(e) => setNewQuestions(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-slate-300 bg-white p-3 text-sm"
-                />
-              </label>
-              <button
-                disabled={createCaseMutation.isPending}
-                className="min-h-10 rounded-lg bg-accent px-5 text-sm font-bold text-white"
-              >
-                {createCaseMutation.isPending ? 'Đang lưu...' : 'Lưu Case Study'}
-              </button>
-            </form>
-          )}
-
-          {casesQuery.isLoading && <p className="text-sm text-slate-600">Đang tải danh sách Case Study…</p>}
-
-          {casesQuery.isError && (
-            <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-              Chưa tìm thấy bảng <code>case_studies</code> trên Supabase. Bạn hãy copy đoạn SQL ở Bước 1 và bấm Run trong
-              Supabase SQL Editor để nạp sẵn 7 Case Study nhé!
+              <h2 className="text-xl font-bold text-slate-900">{brief.title}</h2>
+              <p className="text-sm leading-relaxed text-slate-600">{brief.mission}</p>
             </div>
-          )}
 
-          {!casesQuery.isLoading && filteredCases.length > 0 && (
-            <div className="grid gap-6 lg:grid-cols-12">
-              {/* Cột trái: Danh sách các thẻ Tag Case Study */}
-              <div className="space-y-3 lg:col-span-4">
-                {filteredCases.map((c) => {
-                  const isSelected = activeCase?.id === c.id
-                  const badgeStyle =
-                    TAG_BADGE_STYLE[c.department_tag.toUpperCase()] ??
-                    'bg-slate-100 text-slate-800 border-slate-300'
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedCaseId(c.id)
-                        setCaseMsg('')
-                        setCaseErr('')
-                      }}
-                      className={`w-full rounded-xl border p-4 text-left transition ${
-                        isSelected
-                          ? 'border-slate-900 bg-slate-900 text-white shadow-md'
-                          : 'border-slate-200 bg-white text-slate-900 hover:border-slate-400'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-extrabold uppercase tracking-wider ${
-                            isSelected ? 'border-amber-400 bg-amber-400 text-slate-950' : badgeStyle
-                          }`}
-                        >
-                          {c.tag_code}
-                        </span>
-                        <span
-                          className={`inline-flex items-center gap-1 text-xs font-bold ${
-                            isSelected ? 'text-amber-300' : 'text-orange-700'
-                          }`}
-                        >
-                          <Sparkles aria-hidden="true" size="{13}"/>+{c.reward_credits} Credits
-                        </span>
-                      </div>
-                      <h3 className="mt-2.5 text-sm font-bold leading-snug">{c.title}</h3>
-                      <p className={`mt-1.5 text-xs ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
-                        Vai trò: <b>{c.role_title}</b> · Độ khó: {c.difficulty}
-                      </p>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Cột phải: Nội dung chi tiết Case Study & Khu vực nộp lời giải */}
-              {activeCase && (
-                <div className="space-y-6 lg:col-span-8">
-                  <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-xs">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`rounded-md border px-2.5 py-1 text-xs font-black uppercase ${
-                            TAG_BADGE_STYLE[activeCase.department_tag.toUpperCase()] ??
-                            'bg-slate-100 text-slate-800 border-slate-300'
-                          }`}
-                        >
-                          {activeCase.tag_code}
-                        </span>
-                        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                          Phòng ban: {activeCase.department_tag}
-                        </span>
-                        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                          Vai trò: {activeCase.role_title}
-                        </span>
-                      </div>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-xs font-extrabold text-amber-900">
-                        <Award aria-hidden="true" size="{15}"/>
-                        Thưởng hoàn thành: +{activeCase.reward_credits} Credits
-                      </span>
-                    </div>
-
-                    <h2 className="mt-4 text-lg font-bold text-slate-900">{activeCase.title}</h2>
-
-                    <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Bối cảnh & Dữ kiện Tình huống (Case Scenario)
-                      </h3>
-                      <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">
-                        {activeCase.scenario}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50/70 p-4">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-orange-900">
-                        Câu hỏi & Yêu cầu Giải quyết
-                      </h3>
-                      <div className="mt-2 whitespace-pre-wrap text-sm font-medium leading-relaxed text-slate-900">
-                        {activeCase.questions}
-                      </div>
-                    </div>
-                  </article>
-
-                  {/* Form Nộp lời giải của Thành viên / Phòng ban */}
-                  <form
-                    onSubmit={(e: FormEvent) => {
-                      e.preventDefault()
-                      if (analysis.trim() && solution.trim()) submitSolution.mutate()
-                    }}
-                    className="rounded-xl border border-slate-200 bg-white p-6 space-y-4"
-                  >
-                    <h3 className="text-base font-bold text-slate-900">
-                      Nộp Phương Án Giải Case ({activeCase.tag_code})
-                    </h3>
-                    <label className="block text-sm font-medium text-slate-700">
-                      1. Phân tích nguyên nhân cốt lõi (Root Cause & Bottlenecks)
-                      <textarea
-                        required
-                        rows={4}
-                        value={analysis}
-                        onChange={(e) => setAnalysis(e.target.value)}
-                        placeholder="Trình bày các nguyên nhân chính, số liệu phân tích hoặc rủi ro phát hiện được..."
-                        className="mt-1 block w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-2 focus:outline-accent"
-                      />
-                    </label>
-                    <label className="block text-sm font-medium text-slate-700">
-                      2. Đề xuất giải pháp & Kế hoạch hành động (Action Plan)
-                      <textarea
-                        required
-                        rows={5}
-                        value={solution}
-                        onChange={(e) => setSolution(e.target.value)}
-                        placeholder="Đề xuất phương án xử lý ngắn hạn / dài hạn, KPI đo lường và phối hợp liên phòng ban..."
-                        className="mt-1 block w-full rounded-lg border border-slate-300 p-3 text-sm focus:outline-2 focus:outline-accent"
-                      />
-                    </label>
-
-                    {caseMsg && <p className="text-sm font-semibold text-emerald-700">{caseMsg}</p>}
-                    {caseErr && (
-                      <p role="alert" className="text-sm font-semibold text-red-700">
-                        {caseErr}
-                      </p>
-                    )}
-
-                    <button
-                      disabled={submitSolution.isPending}
-                      className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-bold text-white hover:opacity-95 disabled:opacity-60"
-                    >
-                      <Send aria-hidden="true" size="{16}"/>
-                      {submitSolution.isPending ? 'Đang gửi bài giải…' : 'Nộp / Cập nhật Bài Giải'}
-                    </button>
-                  </form>
-
-                  {/* Danh sách bài giải các thành viên đã nộp */}
-                  <section className="rounded-xl border border-slate-200 bg-white p-6 space-y-4">
-                    <h3 className="text-base font-bold text-slate-900">
-                      Bài giải đã nộp ({submissionsQuery.data?.length ?? 0})
-                    </h3>
-                    {(submissionsQuery.data ?? []).length === 0 ? (
-                      <p className="text-sm text-slate-500">
-                        Chưa có thành viên nào nộp lời giải cho Case này. Hãy là người đầu tiên!
-                      </p>
-                    ) : (
-                      <ul className="space-y-4">
-                        {(submissionsQuery.data ?? []).map((sub) => (
-                          <li key={sub.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-sm font-bold text-slate-900">
-                                {sub.profiles?.full_name ?? 'Thành viên'}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                {sub.status === 'approved' ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-900">
-                                    <CheckCircle2 aria-hidden="true" size="{13}"/>
-                                    Đã duyệt thưởng (+{sub.awarded_credits} Credits)
-                                  </span>
-                                ) : (
-                                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-900">
-                                    Đang chờ chấm
-                                  </span>
-                                )}
-                                {isAdmin && sub.status !== 'approved' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => approveSubmission.mutate(sub.id)}
-                                    disabled={approveSubmission.isPending}
-                                    className="min-h-8 rounded-md bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800"
-                                  >
-                                    Duyệt & Cộng +{activeCase.reward_credits} Credits
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-xs text-slate-500">
-                              Nộp lúc: {new Date(sub.created_at).toLocaleString('vi-VN')}
-                            </div>
-                            <div className="mt-2 rounded-lg bg-white p-3 text-sm">
-                              <div className="font-semibold text-slate-700">Phân tích nguyên nhân:</div>
-                              <p className="mt-1 whitespace-pre-wrap text-slate-800">{sub.analysis}</p>
-                              <div className="mt-3 font-semibold text-slate-700">Giải pháp đề xuất:</div>
-                              <p className="mt-1 whitespace-pre-wrap text-slate-800">{sub.solution}</p>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </section>
+            {deptFiles.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-teal-200 bg-teal-50/50 p-4">
+                <div className="text-xs font-extrabold uppercase tracking-wide text-teal-900">
+                  Tệp dữ liệu gốc đính kèm ({brief.tabLabel})
                 </div>
-              )}
+                {fileError && <p className="text-xs font-semibold text-red-700">{fileError}</p>}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {deptFiles.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-teal-200 bg-white px-3 py-2 text-xs"
+                    >
+                      <div className="flex min-w-0 items-center gap-2">
+                        <FileText size={15} className="shrink-0 text-teal-600" />
+                        <div className="min-w-0">
+                          <div className="truncate font-bold text-slate-900">{doc.title}</div>
+                          <div className="text-[11px] text-slate-500">{fmtSize(doc.size_bytes)}</div>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {canPreview(doc.file_name) && (
+                          <button
+                            type="button"
+                            onClick={() => void openOriginalFile(doc.storage_path, doc.file_name, true)}
+                            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                          >
+                            <ExternalLink size={11} /> Mở
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void openOriginalFile(doc.storage_path, doc.file_name, false)}
+                          className="inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-[11px] font-bold text-white hover:bg-slate-800"
+                        >
+                          <Download size={11} /> Tải
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {brief.metrics.map((m) => (
+                <div key={m.label} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                    {m.label}
+                  </div>
+                  <div className="mt-1.5 text-base font-extrabold text-slate-900">{m.value}</div>
+                </div>
+              ))}
             </div>
-          )}
+
+            {brief.tables.map((tbl) => (
+              <div key={tbl.title} className="space-y-2.5">
+                <h3 className="text-sm font-bold text-slate-900">{tbl.title}</h3>
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-left text-xs">
+                    <thead className="border-b border-slate-200 bg-slate-50 font-bold text-slate-700">
+                      <tr>
+                        {tbl.headers.map((h) => (
+                          <th key={h} className="px-4 py-3">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {tbl.rows.map((row, rIdx) => (
+                        <tr key={rIdx} className="hover:bg-slate-50/60">
+                          {row.map((cell, cIdx) => (
+                            <td key={cIdx} className={`px-4 py-3 ${cIdx === 0 ? 'font-bold text-slate-900' : ''}`}>
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-extrabold uppercase tracking-wide text-slate-800">
+                Yêu cầu đầu ra cần trình bày
+              </div>
+              <ul className="list-disc space-y-1.5 pl-5 text-xs leading-relaxed text-slate-700">
+                {brief.deliverables.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          </article>
         </div>
       )}
 
-      {/* ================= NHÁNH 2: BẢNG DỰ ÁN KANBAN (GIỮ NGUYÊN 100%) ================= */}
       {activeTab === 'projects' && (
         <div className="max-w-3xl">
           <h2 className="text-lg font-semibold">Danh sách Dự án</h2>
@@ -591,7 +488,10 @@ export function ProjectsPage() {
           <ul className="mt-4 grid gap-3 sm:grid-cols-2">
             {projects.map((p) => (
               <li key={p.id}>
-                <Link className="block rounded-lg border border-slate-200 bg-white p-4 hover:border-accent focus-visible:outline-2 focus-visible:outline-accent" to="{`/projects/${p.id}`}">
+                <Link
+                  className="block rounded-lg border border-slate-200 bg-white p-4 hover:border-accent focus-visible:outline-2 focus-visible:outline-accent"
+                  to={`/projects/${p.id}`}
+                >
                   <div className="font-semibold">{p.name}</div>
                   {p.description && <div className="mt-1 text-sm text-slate-600">{p.description}</div>}
                 </Link>
