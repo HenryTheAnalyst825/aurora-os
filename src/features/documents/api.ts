@@ -70,3 +70,17 @@ export async function signedUrl(path: string, downloadName?: string) {
   if (error) throw error
   return data.signedUrl
 }
+// Tải trực tiếp tệp gốc từ Supabase Storage về máy (không bị trình duyệt chặn popup)
+// Tải trực tiếp tệp gốc từ Supabase Storage về máy (không bị trình duyệt chặn popup)
+export async function downloadOriginalDoc(storagePath: string, fileName: string | null) {
+  const { data, error } = await supabase.storage.from(BUCKET).download(storagePath)
+  if (error) throw error
+  const url = URL.createObjectURL(data)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName || storagePath.split('/').pop() || 'tai-lieu-goc'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 5000)
+}
