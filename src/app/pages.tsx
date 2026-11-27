@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { downloadOriginalDoc, fetchDocuments, signedUrl } from '../features/documents/api'
 import {
   Activity,
   AlertTriangle,
@@ -165,14 +166,18 @@ export function Home() {
   }
 
   async function openOriginalFile(d: DocRow, inline: boolean) {
-    setFileError('')
-    try {
-      const url = await signedUrl(d.storage_path, inline ? undefined : d.file_name ?? undefined)
+  setFileError('')
+  try {
+    if (inline) {
+      const url = await signedUrl(d.storage_path)
       window.open(url, '_blank', 'noopener')
-    } catch (e: unknown) {
-      setFileError((e as { message?: string })?.message ?? 'Không mở được tệp gốc. Thử lại sau.')
+    } else {
+      await downloadOriginalDoc(d.storage_path, d.file_name)
     }
+  } catch (e: unknown) {
+    setFileError((e as { message?: string })?.message ?? 'Không tải được tệp gốc. Thử lại sau.')
   }
+}
 
   const activeStation = STATIONS.find((s) => s.id === selectedStation) ?? null
 

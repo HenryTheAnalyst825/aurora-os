@@ -9,7 +9,7 @@ import { canPreview, fmtSize } from '../documents/files'
 import { useMyDepartmentId } from '../documents/hooks'
 import type { Dept } from '../documents/types'
 import { createProject, fetchProjects } from './api'
-
+import { downloadOriginalDoc, fetchDocuments, signedUrl } from '../documents/api'
 type DeptKey = 'production' | 'qc' | 'ehs' | 'hr' | 'finance' | 'rnd'
 
 type DataTableBlock = {
@@ -285,14 +285,18 @@ export function ProjectsPage() {
   }
 
   async function openOriginalFile(storagePath: string, fileName: string | null, inline: boolean) {
-    setFileError('')
-    try {
-      const url = await signedUrl(storagePath, inline ? undefined : fileName ?? undefined)
+  setFileError('')
+  try {
+    if (inline) {
+      const url = await signedUrl(storagePath)
       window.open(url, '_blank', 'noopener')
-    } catch (e: unknown) {
-      setFileError((e as { message?: string })?.message ?? 'Không mở được tệp gốc.')
+    } else {
+      await downloadOriginalDoc(storagePath, fileName)
     }
+  } catch (e: unknown) {
+    setFileError((e as { message?: string })?.message ?? 'Không tải được tệp gốc.')
   }
+}
 
   const { data: projects = [], isLoading } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects })
   const [name, setName] = useState('')
